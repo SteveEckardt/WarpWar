@@ -1,4 +1,3 @@
-@'
 # Roadmap
 
 Current phase: 0
@@ -12,5 +11,3 @@ Current phase: 0
 6. Turn sequence and Learning scenario
 7. UI
 8. Fan Extended rules as optional modules
-'@ | Set-Content docs/roadmap.md
-
