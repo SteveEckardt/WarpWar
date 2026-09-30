@@ -1,6 +1,10 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { lookupCRT, TACTICS } from '../src/engine/crt.js';
+import { lookupCRT } from '../src/engine/crt.js';
+
+// Column order of §7.2 Table 1: target Attacking, Dodging, Retreating.
+// Declared here so the expectations do not depend on anything exported by crt.js.
+const TACTICS = ['attack', 'dodge', 'retreat'];
 
 const M = { result: 'miss', bonus: 0 };
 const H = { result: 'hit', bonus: 0 };
@@ -98,6 +102,20 @@ describe('worked examples (§7.2.1)', () => {
 
   test('Missile: Drive 4 vs Attack at Drive 3 (+1) is Hit +2', () => {
     assert.deepEqual(lookupCRT('attack', 'attack', 4 - 3), { result: 'hit', bonus: 2 });
+  });
+});
+
+describe('worked examples (§7.2.2)', () => {
+  test('W4 attacking at Drive 2 vs S35 dodging at Drive 4 (-2) is a Miss', () => {
+    assert.deepEqual(lookupCRT('attack', 'dodge', 2 - 4), { result: 'miss', bonus: 0 });
+  });
+
+  test('Missile at Drive 3 vs W4 attacking at Drive 2 (+1) is Hit +2', () => {
+    assert.deepEqual(lookupCRT('attack', 'attack', 3 - 2), { result: 'hit', bonus: 2 });
+  });
+
+  test('Missile at Drive 4 vs W4 attacking at Drive 2 (+2) is Hit +1', () => {
+    assert.deepEqual(lookupCRT('attack', 'attack', 4 - 2), { result: 'hit', bonus: 1 });
   });
 });
 
