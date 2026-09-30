@@ -25,19 +25,21 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
   (4), the record (S=3), or the 7-hits/3-effective arithmetic? Should a test be written from this example at all?
 
 ### D-002 — "turns 912" in the tech-level schedule
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §5.2
 - **Text:** "those built during turns 912 are Level 2"
 - **Question:** Confirm the intended range. (Pattern of neighbouring ranges "1-4", "5-8", "13-16" suggests a
   lost hyphen, but the printed text is "912".)
+- **Ruling (2026-09-29):** Turns 9-12. The printed "912" is a lost hyphen.
 
 ### D-003 — Garbled numerals ("I", "l") in examples
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §5.1 S55 example; §5.2 tech example; §7.2.1 missile example; §7.2.2 W4 beam example
 - **Text:** "with PD = I to power the tube" (record shows `PD=1`) / "It adds its tech level of I to the Screen
   power of 3" / "yields a +l difference" / "Reading the ATTACK (l, -2) row"
 - **Question:** Confirm each is the digit 1 (and that "(l, -2)" is the CRT row "-1, -2"), so that tests may
   use those values.
+- **Ruling (2026-09-29):** Every garbled "I" and "l" is the digit 1. "(l, -2)" is CRT row -1, -2.
 
 ### D-004 — S35 order uses "PD=4" instead of "D=4"
 - **Status:** OPEN
@@ -68,7 +70,7 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
 ## B. Turns, scenarios, and victory
 
 ### D-007 — What "turn" means for counting
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §3 event 6; §4.3; §5.1 examples; §5.2
 - **Text:** "A game-turn consists of a player-turn by each player." / "The passage of one turn should be
   recorded if you are playing the Advanced Scenario, since technological levels depend on how many turns have
@@ -76,6 +78,8 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
   of every turn thereafter." / "W2 is built during turn 3"
 - **Question:** For tech levels and Build Point income, is a "turn" a game-turn or a player-turn? Do both
   players share the same turn number?
+- **Ruling (2026-09-29):** "Turn" means game-turn, shared by both players. Each player receives Build Point income
+  during their own Build event.
 
 ### D-008 — "First turn" movement restriction
 - **Status:** OPEN
@@ -102,20 +106,22 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
   Systemship carried aboard a Warpship in the hex add anything?
 
 ### D-011 — Tech level when Technology rules are not used
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §4.1; §4.2; §5.2
 - **Text:** "Repair, Resupply, Technology, and Systemship rules are NOT used." (Learning) / "Repair, Resupply,
   and Technology rules are not used." (Basic) / "In the Advanced Scenario, the technological level for newly
   built ships increases…"
 - **Question:** In the Learning and Basic scenarios, are all ships treated as Level 0? Or is tech level
   absent from combat math altogether (for example, no screen bonus, even of zero)?
+- **Ruling (2026-09-29):** In Learning and Basic scenarios, all ships are Level 0.
 
 ### D-012 — Systemship Racks in the Learning scenario
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §4.1; §5.1
 - **Text:** "40 Build Points for building Warpships (only)" / "Systemship rules are NOT used."
 - **Question:** May Warpships spend BP on Systemship Racks in the Learning scenario (the racks would do
   nothing but could absorb hits), or are SRs forbidden?
+- **Ruling (2026-09-29):** Systemship Racks may not be built in the Learning scenario.
 
 ## C. Building, repair, and resupply
 
@@ -130,15 +136,16 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
   ever be used?
 
 ### D-014 — Minimum legal ship
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §5.1; §7 step 3
 - **Text:** "It is NOT necessary for a ship to have all these attributes." / "A ship with only a warp
   generator left can't control it and the generator explodes."
 - **Question:** May a player build a Warpship with only a Warp Generator (5 BP) or a Systemship with every
   attribute 0? Is there any minimum?
+- **Ruling (2026-09-29):** A ship must have at least one attribute above zero, not counting the Warp Generator.
 
 ### D-015 — Buying Missiles at build time
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §5.1 MISSILES; §5.3
 - **Text:** "One Build Point will build three Missiles." / (resupply) "One BP replaces up to 3 Missiles. …
   Fractions of Build Points left over after Missile resupply are not saved. However, one BP CAN be used to
@@ -146,6 +153,8 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
 - **Question:** When building (not resupplying), may a ship be built with a Missile count that isn't a
   multiple of 3, and does that cost a whole BP? May one BP's three Missiles be split across several newly
   built ships, as resupply allows? What is the "original" Missile stock limit for resupply in those cases?
+- **Ruling (2026-09-29):** Missile cost at build is ceil(M / 3) BP per ship. One BP's Missiles may not be split
+  across ships at build time. The built Missile count is the resupply cap.
 
 ## D. Movement and the map
 
