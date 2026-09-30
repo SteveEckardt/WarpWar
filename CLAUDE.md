@@ -1,4 +1,3 @@
-@'
 # WarpWar Engine
 
 Digital implementation of WarpWar. Classic 1977 rules first. UI later.
@@ -23,4 +22,3 @@ Digital implementation of WarpWar. Classic 1977 rules first. UI later.
 - Run `npm test` before reporting done
 - Never run git commit. Leave changes uncommitted for review.
 - Do only what the prompt asks. If more work seems useful, propose it and stop.
-'@ | Set-Content CLAUDE.md
