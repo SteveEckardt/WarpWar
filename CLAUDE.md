@@ -21,4 +21,6 @@ Digital implementation of WarpWar. Classic 1977 rules first. UI later.
 - Work only on the current phase in docs/roadmap.md
 - Write tests from rulebook examples before implementing
 - Run `npm test` before reporting done
+- Never run git commit. Leave changes uncommitted for review.
+- Do only what the prompt asks. If more work seems useful, propose it and stop.
 '@ | Set-Content CLAUDE.md
