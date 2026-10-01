@@ -1,6 +1,6 @@
 # Roadmap
 
-Current phase: 6b
+Current phase: 7a
 
 0. Rules extraction: PDF to docs/rules/classic.md, ambiguities logged
 1. Ship building: attributes, BP costs, validation
@@ -16,5 +16,11 @@ Current phase: 6b
 6a. Playable map design: an original map (D-019), proposed in docs/maps/classic-original.md; no code
 6b. Turn sequence and Learning scenario (uses the map from 6a, saved to data/maps/ once approved)
 6c. Basic and Advanced scenarios: BP income, repair, resupply, tech advancement
-7. UI
+7. UI: vanilla HTML, CSS and ES modules in src/ui/, no build step; game state changes only through applyAction
+7a. UI foundation: static server (npm start), SVG hex map, ships by side, star panel with ship records,
+    a hard-coded sample Learning game; read-only
+7b. Setup and ship builder
+7c. Movement
+7d. Combat with hidden-order handoff
+7e. Game log and victory screen
 8. Fan Extended rules as optional modules

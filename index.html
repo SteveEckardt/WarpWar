@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WarpWar</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="src/ui/style.css">
+</head>
+<body>
+  <header>
+    <h1>WarpWar</h1>
+    <p id="status">Loading…</p>
+  </header>
+  <main>
+    <div id="map" aria-live="polite"></div>
+    <aside id="panel">
+      <p class="hint">Click a star to see the ships there.</p>
+    </aside>
+  </main>
+  <footer>
+    <span class="key"><span class="swatch side-A"></span>Side A</span>
+    <span class="key"><span class="swatch side-B"></span>Side B</span>
+    <span class="key"><span class="swatch neutral"></span>Star</span>
+    <span class="key">Ringed star: base · Line: warpline (1 MP) · Counter: number of ships</span>
+  </footer>
+  <script type="module" src="src/ui/main.js"></script>
+</body>
+</html>
