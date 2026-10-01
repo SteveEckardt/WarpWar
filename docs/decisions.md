@@ -15,7 +15,7 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
 ## A. Contradictions and text errors
 
 ### D-001 — W4 Screens powered above built capacity
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §7.2.2 EXAMPLE; §7.1.2; §5.1 SCREENS
 - **Text:** "A ship of technological level 0 has Screens powered at 4. … The Screen absorbs 4 of the 7 hits." /
   "BEFORE: W4: Level 0, PD=7, B=3, S=3, T=1, M= 6, SR=1" / §7.1.2: "Beams and Screens cannot be powered past
@@ -23,6 +23,8 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
   the maximum strength at which that Screen may be powered during combat."
 - **Question:** The example powers Screens at 4 on a ship built with S=3. Which is in error: the Screen power
   (4), the record (S=3), or the 7-hits/3-effective arithmetic? Should a test be written from this example at all?
+- **Ruling (2026-09-30):** The example is in error. Screens may never be powered above built S. Tests use the
+  7-hit, Screen 4, 3-effective arithmetic on a ship built with S of at least 4, not on W4's printed record.
 
 ### D-002 — "turns 912" in the tech-level schedule
 - **Status:** RESOLVED
@@ -42,20 +44,22 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
 - **Ruling (2026-09-29):** Every garbled "I" and "l" is the digit 1. "(l, -2)" is CRT row -1, -2.
 
 ### D-004 — S35 order uses "PD=4" instead of "D=4"
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §7.2.2 second-round example
 - **Text:** "S35 (Level 1): DODGE PD=4, B=0, S=0, T=2." — every other order writes the Drive allocation as
   "D=" (e.g., "W4 (Level 0): ATTACK D=2, B=3, S=1,T=0"), and S35's record is "PD=6".
 - **Question:** Is "PD=4" a Drive allocation of 4 (as the -2 drive difference in the same example implies),
   or something else?
+- **Ruling (2026-09-30):** "PD=4" in the S35 order is a Drive allocation of 4.
 
 ### D-005 — Missile order names the firing ship as its target
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §7.1.3
 - **Text:** "S25 (Level 0) DODGE: D=4, B=0, S=0, T=1. / M at S25: D=3." — S25 is the firing ship; the prose
   says "the MISSILE attacked W3."
 - **Question:** Should the missile line read "M at W3: D=3"? Confirm the target before using this example
   as a test.
+- **Ruling (2026-09-30):** The missile's target is W3.
 
 ### D-006 — Warplines "treated as space hexes" vs. warpline movement
 - **Status:** OPEN
@@ -203,12 +207,15 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
   targeted? Or does it take no part until dropped?
 
 ### D-021 — Systemship Rack damage while carrying
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §5.1 SYSTEMSHIP RACKS; §7.2.2
 - **Text:** "may carry one Systemship for each SR it has" / effective hits are subtracted "directly from
   Power/Drives, Beams, Screens, Tubes, Missiles, and Systemship Racks."
 - **Question:** If hits drop a Warpship's SR below the number of Systemships it carries, what happens to the
   excess Systemships (destroyed, dropped in the hex, still carried)? May the owner choose to take such hits?
+- **Ruling (2026-09-30):** Occupied racks cannot take hits. The owner may assign hits to a carried Systemship's
+  attributes instead. Phase 3 implements only what the current ship model supports; damage to carried
+  Systemships is left for the phase that builds carrying.
 
 ### D-022 — Retreat or forced withdrawal into a hex with enemy ships
 - **Status:** OPEN
@@ -266,17 +273,20 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
   Systemship leave with it?
 
 ### D-029 — Missiles fired this round used to absorb this round's hits
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §5.1 MISSILES; §7.2.2
 - **Text:** "As they are fired, they must be subtracted from the ship's Missile stock" / "If a ship has only
   1 or 2 Missiles left, it can use them to take a hit. However, if a ship has 3 or more Missiles, a hit in
   Missiles must take out 3."
 - **Question:** When a ship takes hits in the same round it fires Missiles, are the fired Missiles already
   gone from the stock that can absorb hits?
+- **Ruling (2026-09-30):** Already gone. Missiles fired in a round leave the stock when fired and cannot absorb
+  hits taken that round.
 
 ### D-030 — Beam with zero power allocated
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §7 step 1(b); §7.2.1 HIT; §5.2
 - **Text:** "A Beam which hits does damage equivalent to the power of the beam, plus tech level."
 - **Question:** May a ship name a Beam target with B=0 allocated (or with no Beam built) and, on a hit, deal
   tech-level (and CRT bonus) damage? Or must a Beam be powered at 1 or more to fire?
+- **Ruling (2026-09-30):** A Beam must be powered at 1 or more to fire.
