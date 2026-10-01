@@ -61,8 +61,11 @@ function planOverlay(plan, at, map) {
   const start = at(centre(plan.path[0]));
   out.push(`<circle cx="${f(start.x)}" cy="${f(start.y)}" r="5" fill="#facc15" pointer-events="none"/>`);
   for (const [i, t] of plan.targets.entries()) {
-    const label = t.step.type === 'jump' ? `Jump to ${map.stars.find((s) => s.id === t.step.to)?.name ?? t.step.to}` : `Move to ${t.to.q}, ${t.to.r}`;
-    out.push(`<polygon class="target ${t.step.type}" data-target="${i}" points="${hexPoints(at(centre(t.to)))}" tabindex="0" role="button" aria-label="${esc(label)}"><title>${esc(label)} (1 MP)</title></polygon>`);
+    // A target may bring its own label (placing an escaped ship); a movement step is labelled here.
+    const kind = t.step?.type ?? 'place';
+    const label = t.label ?? (kind === 'jump' ? `Jump to ${map.stars.find((s) => s.id === t.step.to)?.name ?? t.step.to}` : `Move to ${t.to.q}, ${t.to.r}`);
+    const cost = t.step ? ' (1 MP)' : '';
+    out.push(`<polygon class="target ${kind}" data-target="${i}" points="${hexPoints(at(centre(t.to)))}" tabindex="0" role="button" aria-label="${esc(label)}"><title>${esc(label)}${cost}</title></polygon>`);
   }
   return out;
 }

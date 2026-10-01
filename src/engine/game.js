@@ -385,6 +385,9 @@ function resolve(s) {
   s.lastRound = {
     star: c.star,
     round: c.round,
+    orders: allOrders(c), // §7 step 2: shown to both players
+    ships: Object.fromEntries(Object.entries(c.hex.ships).map(([id, sh]) => [id, { owner: sh.owner, level: sh.level }])),
+    quietRounds: r.hex.quietRounds,
     shots: r.shots,
     damage: r.damage,
     destroyed: r.destroyed,
@@ -417,6 +420,19 @@ function finishCombat(s) {
   s.combat = null;
   s.contested = contestedStars(s);
   s.step = s.contested.length > 0 ? 'combat' : 'rearrange';
+}
+
+// Would this hex be a legal place for a side's escaped or withdrawing ship from the current combat star?
+// The same check placeRetreats and withdraw make (D-022, D-040). Returns null if legal, else { code, message }.
+export function previewDestination(state, side, to) {
+  if (state.step !== 'combat' || !state.combat) return { code: 'NO_COMBAT', message: 'No combat is being resolved' };
+  try {
+    checkDestination(state, side, starById(state.map, state.combat.star), to, 'Destination');
+    return null;
+  } catch (e) {
+    if (e instanceof Rejection) return { code: e.code, message: e.message };
+    throw e;
+  }
 }
 
 // §7 step 4, D-022: the owner of each escaped ship picks its adjacent hex. destinations: { id: { q, r } }.

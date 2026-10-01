@@ -120,3 +120,26 @@ td.hidden { text-align: left; color: var(--muted); font-style: italic; }
 .steps { margin: 6px 0; padding-left: 22px; }
 .buttons { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
 table.movers td:last-child { text-align: right; }
+
+/* Phase 7d: combat */
+fieldset.order, fieldset.hit { margin: 10px 0; }
+fieldset.order legend { font-size: 12px; color: var(--muted); }
+.tactics label { display: inline-block; margin-right: 12px; }
+.powers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 8px; }
+.powers label { display: grid; gap: 2px; margin: 2px 0; font-size: 12px; color: var(--muted); }
+.powers input { width: 100%; }
+.missile { display: flex; gap: 6px; align-items: end; flex-wrap: wrap; margin: 4px 0; }
+.missile label { display: inline-grid; margin: 0; }
+.missile input { width: 4.5em; }
+.power-used { margin: 6px 0; padding-left: 18px; color: var(--muted); }
+.ship-tag { padding: 0 4px; border-radius: 3px; color: #f8fafc; }
+.ship-tag.side-A { background: var(--side-a); }
+.ship-tag.side-B { background: var(--side-b); }
+#handoff .card.report { max-width: 640px; max-height: calc(100vh - 32px); overflow: auto; text-align: left; }
+.report h3 { margin-top: 0; }
+.report h4 { margin: 12px 0 4px; color: var(--muted); font-weight: 500; }
+.report ul { margin: 0; padding-left: 18px; }
+.orders-text { font-family: ui-monospace, Consolas, monospace; font-size: 13px; border-left: 4px solid; padding-left: 8px; }
+.orders-text.side-A { border-color: var(--side-a); }
+.orders-text.side-B { border-color: var(--side-b); }
+tr.placing-now th, tr.placing-now td { color: var(--focus); }

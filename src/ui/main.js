@@ -1,6 +1,7 @@
 // The page controller: holds the game and the UI's own state, renders, and turns clicks into engine actions.
 // Every change to the game goes through applyAction. D-039: private views wait behind a handoff screen until
-// the player who must act says they are at the screen. Add ?sample to the URL to load the Phase 7a sample game.
+// the player who must act says they are at the screen. A round's public report (§7 step 2) is shown to both
+// players before the next handoff. Add ?sample to the URL to load the Phase 7a sample game.
 
 import { createGame, applyAction } from '../engine/game.js';
 import { starAt } from '../engine/map.js';
@@ -9,7 +10,11 @@ import { renderHexPanel, renderStatus } from './panel.js';
 import { renderNewGame, renderChooseSide } from './setup.js';
 import { EMPTY_DESIGN, nextShipId, buildAction, renderBuilder, renderDesignSummary } from './builder.js';
 import { renderMovement, planInfo } from './movement.js';
-import { actor } from './view.js';
+import {
+  renderChoose, renderOrders, renderOrderCheck, blankOrders, pendingReport, renderHits, renderHitCheck,
+  renderPlacement, placementShips, placementTargets,
+} from './combat.js';
+import { actor, displayId, plainIds } from './view.js';
 import { sampleGame } from './sample.js';
 
 const $ = (id) => document.getElementById(id);
@@ -30,9 +35,42 @@ const ui = {
   design: { ...EMPTY_DESIGN },
   drafts: [],
   error: null,
+  // Combat drafts, for the player at the screen; reset whenever the stage, round or player changes.
+  draftKey: null,
+  orders: {},
+  allocations: {},
+  dest: {},
+  placing: null,
+  seen: new Set(), // public round reports already shown
 };
 
 const needsHandoff = () => ui.game && actor(ui.game) != null && ui.viewer !== actor(ui.game);
+const errorHtml = () => (ui.error ? `<p class="error" role="alert">${esc(ui.error)}</p>` : '');
+
+// Starts fresh combat drafts when the decision at hand is a new one.
+function syncDrafts() {
+  const g = ui.game;
+  const c = g?.step === 'combat' ? g.combat : null;
+  const key = c ? `${c.star}:${c.round}:${c.stage}:${ui.viewer}` : null;
+  if (key === ui.draftKey) return;
+  ui.draftKey = key;
+  ui.orders = {};
+  ui.allocations = {};
+  ui.dest = {};
+  ui.placing = null;
+  if (!c || !ui.viewer) return;
+  const side = g.sides[ui.viewer];
+  if (c.stage === 'orders') ui.orders = blankOrders(g, side);
+  if (c.stage === 'retreats' || c.stage === 'withdraw') ui.placing = placementShips(g, side)[0] ?? null;
+}
+
+// The map targets while placing an escaped or withdrawing ship.
+function placementPlan() {
+  const g = ui.game;
+  const star = g.map.stars.find((s) => s.id === g.combat.star);
+  const targets = placementTargets(g, g.sides[ui.viewer]).map((to) => ({ to, label: `Place ${displayId(ui.placing)} at ${to.q}, ${to.r}` }));
+  return { path: [{ q: star.q, r: star.r }], targets };
+}
 
 function actionsHtml() {
   const g = ui.game;
@@ -40,12 +78,18 @@ function actionsHtml() {
   if (g.step === 'setup') return renderChooseSide(g);
   if (g.step === 'build') return renderBuilder(g, ui.viewer, ui);
   if (g.step === 'movement') return renderMovement(g, ui.viewer, ui);
-  if (g.step === 'combat') return `<h2>Combat</h2><p class="hint">Combat comes in Phase 7d.</p>`;
+  if (g.step === 'combat') {
+    const c = g.combat;
+    if (!c) return renderChoose(g) + errorHtml();
+    if (c.stage === 'orders') return renderOrders(g, ui.viewer, ui.orders) + errorHtml();
+    if (c.stage === 'hits') return renderHits(g, ui.viewer, ui.allocations) + errorHtml();
+    return renderPlacement(g, ui.viewer, ui.dest, ui.placing) + errorHtml();
+  }
   if (g.step === 'rearrange') {
     return [
       `<h2>End of turn</h2>`,
       `<p class="hint">Movement and combat are over for this turn.</p>`,
-      ui.error ? `<p class="error" role="alert">${esc(ui.error)}</p>` : '',
+      errorHtml(),
       `<button type="button" class="primary" data-action="end-turn">End turn</button>`,
     ].join('\n');
   }
@@ -54,14 +98,25 @@ function actionsHtml() {
 
 function render() {
   const state = ui.game ?? ui.preview;
-  const hide = needsHandoff();
+  const report = ui.game ? pendingReport(ui.game, ui.seen) : null;
+  const hide = report != null || needsHandoff();
   statusEl.innerHTML = ui.game ? renderStatus(ui.game) : 'Set up a new game';
-  const plan = ui.plan && !hide ? planInfo(ui.game, ui.plan.ship, ui.plan.steps) : null;
+  if (!hide) syncDrafts();
+  let plan = null;
+  if (!hide && ui.plan) plan = planInfo(ui.game, ui.plan.ship, ui.plan.steps);
+  if (!hide && ui.placing) plan = placementPlan();
   const star = ui.selected ? starAt(state.map, ui.selected) : null;
   mapEl.innerHTML = renderMap(state, { selected: star?.id ?? null, selectedHex: star ? null : ui.selected, plan });
 
   handoffEl.hidden = !hide;
   mainEl.inert = hide;
+  if (report) {
+    // Public: both players look together (§7 step 2). No private view is open behind it.
+    handoffEl.innerHTML = `<div class="card report">${report.html}<button type="button" class="primary" data-action="seen" data-key="${esc(report.key)}">Continue</button></div>`;
+    panelEl.innerHTML = '';
+    handoffEl.querySelector('button').focus();
+    return;
+  }
   if (hide) {
     const next = actor(ui.game);
     handoffEl.innerHTML = `<div class="card"><h2>Pass the screen to ${esc(next)}</h2><p>${esc(next)}, press the button when only you can see the screen.</p><button type="button" class="primary" data-action="reveal">I am ${esc(next)}</button></div>`;
@@ -77,7 +132,7 @@ function render() {
 function act(action) {
   const r = applyAction(ui.game, action);
   if (!r.ok) {
-    ui.error = r.message;
+    ui.error = plainIds(r.message);
     return false;
   }
   ui.game = r.state;
@@ -99,12 +154,50 @@ function startGame(form) {
   act({ type: 'setFirstPlayer', player: players[first] });
 }
 
+const count = (input) => (input.value.trim() === '' ? 0 : Number(input.value));
+
 function readDesign(form) {
   const design = { ...EMPTY_DESIGN, WG: form.elements.WG ? form.elements.WG.checked : true };
-  for (const input of form.querySelectorAll('input[type="number"]')) {
-    design[input.name] = input.value.trim() === '' ? 0 : Number(input.value);
-  }
+  for (const input of form.querySelectorAll('input[type="number"]')) design[input.name] = count(input);
   return design;
+}
+
+function readOrders(form) {
+  const orders = {};
+  for (const set of form.querySelectorAll('fieldset[data-ship]')) {
+    const order = { tactic: set.querySelector('input[type="radio"]:checked')?.value ?? 'attack' };
+    for (const k of ['D', 'B', 'S', 'T']) order[k] = count(set.querySelector(`.powers input[name="${k}"]`));
+    const beam = set.querySelector('select[name="beamTarget"]');
+    if (beam) order.beamTarget = beam.value || null;
+    const missiles = [...set.querySelectorAll('.missile')].map((row) => ({
+      target: row.querySelector('select').value,
+      drive: count(row.querySelector('input[name="drive"]')),
+    }));
+    if (missiles.length > 0) order.missiles = missiles;
+    orders[set.dataset.ship] = order;
+  }
+  return orders;
+}
+
+function readAllocations(form) {
+  const allocations = {};
+  for (const set of form.querySelectorAll('fieldset[data-ship]')) {
+    const a = {};
+    for (const input of set.querySelectorAll('input[type="number"]')) {
+      const n = count(input);
+      if (n !== 0) a[input.name] = n;
+    }
+    allocations[set.dataset.ship] = a;
+  }
+  return allocations;
+}
+
+// Orders as the engine takes them: no empty Beam target, no empty Missile list.
+function cleanOrders(orders) {
+  return Object.fromEntries(Object.entries(orders).map(([id, o]) => {
+    const { beamTarget, missiles, ...rest } = o;
+    return [id, { ...rest, ...(beamTarget ? { beamTarget } : {}), ...(missiles?.length ? { missiles } : {}) }];
+  }));
 }
 
 const handlers = {
@@ -114,6 +207,9 @@ const handlers = {
     ui.design = { ...EMPTY_DESIGN };
     ui.drafts = [];
     ui.error = null;
+  },
+  seen(el) {
+    ui.seen.add(el.dataset.key);
   },
   side(el) {
     const second = ui.game.players.find((p) => p !== ui.game.first);
@@ -162,6 +258,37 @@ const handlers = {
   'end-turn'() {
     act({ type: 'endTurn', player: ui.viewer });
   },
+  'choose-combat'(el) {
+    if (act({ type: 'chooseCombat', player: ui.viewer, star: el.dataset.star })) {
+      const star = ui.game.map.stars.find((s) => s.id === el.dataset.star);
+      ui.selected = { q: star.q, r: star.r };
+    }
+  },
+  'add-missile'(el) {
+    const id = el.dataset.ship;
+    const { ships } = ui.game.combat.hex;
+    const enemy = Object.keys(ships).find((sid) => ships[sid].owner !== ui.game.sides[ui.viewer]);
+    const order = ui.orders[id];
+    ui.orders = { ...ui.orders, [id]: { ...order, missiles: [...(order.missiles ?? []), { target: enemy, drive: 1 }] } };
+  },
+  'remove-missile'(el) {
+    const id = el.dataset.ship;
+    const missiles = ui.orders[id].missiles.filter((_, i) => i !== Number(el.dataset.index));
+    ui.orders = { ...ui.orders, [id]: { ...ui.orders[id], missiles } };
+  },
+  'submit-orders'() {
+    act({ type: 'orders', player: ui.viewer, orders: cleanOrders(ui.orders) });
+  },
+  'submit-hits'() {
+    act({ type: 'allocateHits', player: ui.viewer, allocations: ui.allocations });
+  },
+  'pick-place'(el) {
+    ui.placing = el.dataset.id;
+  },
+  'submit-placement'() {
+    if (ui.game.combat.stage === 'retreats') act({ type: 'placeRetreats', player: ui.viewer, destinations: ui.dest });
+    else act({ type: 'withdraw', player: ui.viewer, destinations: ui.dest, pickups: {} });
+  },
 };
 
 document.addEventListener('click', (e) => {
@@ -171,8 +298,18 @@ document.addEventListener('click', (e) => {
     render();
     return;
   }
-  // A highlighted target while planning: add that step to the path.
   const target = e.target.closest('#map [data-target]');
+  // A highlighted hex while placing a ship: that ship goes there; on to the next unplaced one.
+  if (target && ui.placing) {
+    const t = placementPlan().targets[Number(target.dataset.target)];
+    if (t) {
+      ui.dest = { ...ui.dest, [ui.placing]: t.to };
+      ui.placing = placementShips(ui.game, ui.game.sides[ui.viewer]).find((id) => !ui.dest[id]) ?? null;
+      render();
+    }
+    return;
+  }
+  // A highlighted target while planning: add that step to the path.
   if (target && ui.plan) {
     const t = planInfo(ui.game, ui.plan.ship, ui.plan.steps).targets[Number(target.dataset.target)];
     if (t) {
@@ -211,8 +348,20 @@ document.addEventListener('submit', (e) => {
   }
 });
 
-// The builder's inputs only refresh the cost and errors, so focus stays in the field being typed in.
+// Form inputs only refresh their checks, so focus stays in the field being typed in.
 document.addEventListener('input', (e) => {
+  const orders = e.target.closest('form.orders');
+  if (orders) {
+    ui.orders = readOrders(orders);
+    $('order-check').innerHTML = renderOrderCheck(ui.game, ui.game.sides[ui.viewer], ui.orders);
+    return;
+  }
+  const hits = e.target.closest('form.hits');
+  if (hits) {
+    ui.allocations = readAllocations(hits);
+    $('hit-check').innerHTML = renderHitCheck(ui.game, ui.game.sides[ui.viewer], ui.allocations);
+    return;
+  }
   const form = e.target.closest('form.design');
   if (!form) return;
   ui.design = readDesign(form);

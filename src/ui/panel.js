@@ -80,7 +80,8 @@ export function renderStatus(state) {
   }
   const parts = [`Game-turn ${state.turn}`, `${esc(state.scenario)} scenario`];
   if (state.active) parts.push(`${esc(playerOf(state, state.active))} (${state.active}) to play`);
-  const stage = state.step === 'combat' ? (state.combat ? `, ${state.combat.stage} at ${esc(state.combat.star)}` : ', choosing a contested star') : '';
+  const starName = (id) => state.map.stars.find((s) => s.id === id)?.name ?? id;
+  const stage = state.step === 'combat' ? (state.combat ? `, ${state.combat.stage} at ${esc(starName(state.combat.star))}` : ', choosing a contested star') : '';
   parts.push(`step: ${state.step}${stage}`);
   return parts.join(' · ');
 }

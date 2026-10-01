@@ -1,7 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createGame, applyAction, previewMove, SCENARIOS } from '../src/engine/game.js';
+import { createGame, applyAction, previewMove, previewDestination, SCENARIOS } from '../src/engine/game.js';
 
 // Phase 6b: turn sequence (§3), setup (§4), the Learning scenario (§4.1). Rulings D-007 to D-013, D-022.
 // Expected values are worked out by hand from docs/rules/classic.md and docs/maps/classic-original.md.
@@ -380,6 +380,45 @@ describe('previewMove: the same check the move action makes', () => {
 
   test('an unknown ship is null', () => {
     assert.equal(previewMove(setupWin(), 'nope', []), null);
+  });
+});
+
+describe('what players are shown of a round (§7 step 2)', () => {
+  test('the last round keeps the orders both players wrote', () => {
+    const s = winRound1Done();
+    assert.deepEqual(s.lastRound.orders, { ...ROUND1_ORDERS.ann, ...ROUND1_ORDERS.bob });
+  });
+
+  test('and who fought: the owner and tech level of each ship, destroyed ships too', () => {
+    assert.deepEqual(winRound1Done().lastRound.ships, { A1: { owner: 'A', level: 0 }, B1: { owner: 'B', level: 0 } });
+    assert.deepEqual(winTurn1BDone().lastRound.ships, { A1: { owner: 'A', level: 0 }, B1: { owner: 'B', level: 0 } });
+  });
+
+  test('and how many rounds in a row nobody took effective hits (§7 step 6(c))', () => {
+    assert.equal(winRound1Done().lastRound.quietRounds, 0);
+    const s = drawCombat();
+    assert.equal(s.combat.stage, 'withdraw');
+    assert.equal(s.lastRound.quietRounds, 3);
+  });
+});
+
+describe('previewDestination: the retreat and withdrawal hex check (D-022, D-040)', () => {
+  test('an adjacent hex is legal; others give the code the action would', () => {
+    const s = winTurn2ACombat(); // B2 escaped from Nippur (11, 0) on game-turn 2
+    assert.equal(s.combat.stage, 'retreats');
+    assert.equal(previewDestination(s, 'B', { q: 12, r: 0 }), null);
+    assert.equal(previewDestination(s, 'B', { q: 13, r: 0 }).code, 'NOT_ADJACENT');
+    const edged = structuredClone(s);
+    edged.map.bounds = { x: [-13, 11], r: [-8, 8] };
+    assert.equal(previewDestination(edged, 'B', { q: 12, r: 0 }).code, 'OFF_MAP');
+    const crowded = structuredClone(s);
+    crowded.map.stars.push({ id: 'x', name: 'X', q: 12, r: -1, baseOwner: null });
+    crowded.ships.A9 = { ...crowded.ships.A1, q: 12, r: -1 };
+    assert.equal(previewDestination(crowded, 'B', { q: 12, r: -1 }).code, 'ENEMY_STAR');
+  });
+
+  test('outside combat there is nothing to place', () => {
+    assert.equal(previewDestination(setupWin(), 'A', { q: 0, r: 0 }).code, 'NO_COMBAT');
   });
 });
 

@@ -1,6 +1,6 @@
 # Roadmap
 
-Current phase: 7c
+Current phase: 7d
 
 0. Rules extraction: PDF to docs/rules/classic.md, ambiguities logged
 1. Ship building: attributes, BP costs, validation
