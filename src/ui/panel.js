@@ -3,12 +3,14 @@
 import { ATTRIBUTES } from '../engine/ships.js';
 import { SIDES } from '../engine/game.js';
 import { esc, shipsAt } from './hexmap.js';
+import { displayId, playerOf, seesRecords } from './view.js';
 
-const playerOf = (state, side) => (state.sides ? state.players.find((p) => state.sides[p] === side) : null);
 const sideLabel = (state, side) => {
   const player = playerOf(state, side);
   return player ? `Side ${side} · ${esc(player)}` : `Side ${side}`;
 };
+
+const typeOf = (ship) => (ship.WG ? 'Warpship' : 'Systemship');
 
 // A strength cell: current value, and the built value after a slash if they differ (§5.3).
 function cell(ship, attr) {
@@ -18,11 +20,15 @@ function cell(ship, attr) {
 }
 
 function row(id, ship, note = '') {
-  const type = ship.WG ? 'Warpship' : 'Systemship';
-  return `<tr><th scope="row">${esc(id)}</th><td>${type}${note}</td><td>${ship.level ?? 0}</td>${ATTRIBUTES.map((a) => cell(ship, a)).join('')}</tr>`;
+  return `<tr><th scope="row">${esc(displayId(id))}</th><td>${typeOf(ship)}${note}</td><td>${ship.level ?? 0}</td>${ATTRIBUTES.map((a) => cell(ship, a)).join('')}</tr>`;
 }
 
-export function renderStarPanel(state, starId) {
+// D-039: an enemy ship is a counter. Its cargo is not on the map, so it is not shown.
+const counterRow = (id, ship) =>
+  `<tr><th scope="row">${esc(displayId(id))}</th><td>${typeOf(ship)}</td><td colspan="${ATTRIBUTES.length + 1}" class="hidden">Record hidden</td></tr>`;
+
+// options.viewer: the player at the screen, who sees their own records (D-039).
+export function renderStarPanel(state, starId, { viewer = null } = {}) {
   const star = state.map.stars.find((s) => s.id === starId);
   if (!star) return `<p class="hint">Click a star to see the ships there.</p>`;
   const out = [];
@@ -36,13 +42,18 @@ export function renderStarPanel(state, starId) {
   for (const side of SIDES) {
     const ships = here.filter(([, sh]) => sh.owner === side);
     if (ships.length === 0) continue;
+    const open = seesRecords(state, viewer, side);
     out.push(`<section class="side side-${side}">`);
     out.push(`<h3>${sideLabel(state, side)}</h3>`);
     out.push(`<table><thead><tr><th>Ship</th><th>Type</th><th title="Tech level">Lvl</th>${ATTRIBUTES.map((a) => `<th>${a}</th>`).join('')}</tr></thead><tbody>`);
     for (const [id, ship] of ships) {
+      if (!open) {
+        out.push(counterRow(id, ship));
+        continue;
+      }
       out.push(row(id, ship));
       for (const [cid, carried] of Object.entries(ship.carrying ?? {})) {
-        out.push(row(cid, carried, `<span class="carried">, carried by ${esc(id)}</span>`));
+        out.push(row(cid, carried, `<span class="carried">, carried by ${esc(displayId(id))}</span>`));
       }
     }
     out.push(`</tbody></table></section>`);

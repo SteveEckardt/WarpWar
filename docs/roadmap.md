@@ -1,6 +1,6 @@
 # Roadmap
 
-Current phase: 7a
+Current phase: 7b
 
 0. Rules extraction: PDF to docs/rules/classic.md, ambiguities logged
 1. Ship building: attributes, BP costs, validation
@@ -19,7 +19,7 @@ Current phase: 7a
 7. UI: vanilla HTML, CSS and ES modules in src/ui/, no build step; game state changes only through applyAction
 7a. UI foundation: static server (npm start), SVG hex map, ships by side, star panel with ship records,
     a hard-coded sample Learning game; read-only
-7b. Setup and ship builder
+7b. Setup and ship builder; D-039 handoff screen; a bare End turn button stands in for movement until 7c
 7c. Movement
 7d. Combat with hidden-order handoff
 7e. Game log and victory screen

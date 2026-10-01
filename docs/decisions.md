@@ -396,3 +396,21 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
   which ships count, and do carried Systemships count?
 - **Ruling (2026-09-30):** Clarifies D-009. A ship is effective if it has PD of 1 or more and is either a
   Warpship or carries a weapon it can power. This applies to carried Systemships too.
+
+## G. Hidden information
+
+### D-039 — Who may see ship records during play
+- **Status:** RESOLVED
+- **Where:** §5, §5.1 BUILD POINTS; §2 SCRATCH PAPER; §5.1 SYSTEMSHIPS
+- **Text:** "A written record is kept by each player for every ship he builds. Players show these records to each
+  other after (but not during) the game." / "IT IS NECESSARY to make a written record for each ship built, the
+  damage it takes, and the repairs and resupply it receives." / "the Systemship's counter does NOT appear on the
+  map."
+- **Question:** On paper only counters are public. What may a player see of the opponent's ships during play in
+  a shared-screen game: the records (attributes and damage), only the counters on the map (position, Warpship or
+  Systemship, how many), or something in between? Are the BP an opponent spends at a Build event public? Are the
+  Systemships an enemy Warpship carries visible?
+- **Ruling (2026-10-01):** Counters only. A player sees their own ship records in full. Of enemy ships they see
+  only what the counters show: position, Warpship or Systemship, and the counter number. They do not see enemy
+  records, enemy Build Point spending, or the Systemships an enemy Warpship carries. All records are shown when
+  the game is over. In a shared-screen game, private views sit behind a "pass to <player>" handoff screen.

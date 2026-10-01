@@ -97,7 +97,7 @@ describe('renderStarPanel', () => {
   });
 
   test('lists each side with its player and each ship with its record', () => {
-    const html = renderStarPanel(placed(), 'ur');
+    const html = renderStarPanel(placed(), 'ur', { viewer: 'ann' });
     assert.match(html, /Side A · ann/);
     assert.doesNotMatch(html, /Side B/);
     assert.ok(html.indexOf('>A1<') < html.indexOf('>A2<'), 'ships in id order');
@@ -105,7 +105,7 @@ describe('renderStarPanel', () => {
   });
 
   test('a damaged attribute shows current and built strength', () => {
-    const html = renderStarPanel(placed(), 'uruk');
+    const html = renderStarPanel(placed(), 'uruk', { viewer: 'bob' });
     assert.match(html, /<td[^>]*>6<span class="built">\/10<\/span><\/td>/);
     assert.match(html, /<td[^>]*>10<\/td>/);
   });
@@ -113,13 +113,39 @@ describe('renderStarPanel', () => {
   test('carried Systemships are listed under their carrier', () => {
     const s = placed();
     s.ships.A1.carrying = { S1: { WG: false, level: 0, PD: 1, B: 1, S: 0, T: 0, M: 0, SR: 0, built: { PD: 1, B: 1, S: 0, T: 0, M: 0, SR: 0 } } };
-    const html = renderStarPanel(s, 'ur');
+    const html = renderStarPanel(s, 'ur', { viewer: 'ann' });
     assert.match(html, /carried by A1/);
     assert.match(html, /Systemship/);
   });
 
   test('a star with no ships says so', () => {
     assert.match(renderStarPanel(placed(), 'girsu'), /No ships here/);
+  });
+
+  test('D-039: enemy ships show as counters only, without records or cargo', () => {
+    const s = placed();
+    s.ships.A1.carrying = { S1: { WG: false, level: 0, PD: 1, B: 1, S: 0, T: 0, M: 0, SR: 0, built: { PD: 1, B: 1, S: 0, T: 0, M: 0, SR: 0 } } };
+    const html = renderStarPanel(s, 'ur', { viewer: 'bob' });
+    assert.match(html, /Side A · ann/);
+    assert.match(html, />A1</);
+    assert.match(html, /Warpship/);
+    assert.match(html, /Record hidden/);
+    assert.doesNotMatch(html, /<td>8<\/td>/);
+    assert.doesNotMatch(html, /S1|Systemship/);
+  });
+
+  test('D-039: with no viewer, no records are shown; once the game is over, all are', () => {
+    assert.match(renderStarPanel(placed(), 'uruk'), /Record hidden/);
+    const s = placed();
+    s.step = 'over';
+    assert.match(renderStarPanel(s, 'uruk'), /6<span class="built">\/10/);
+  });
+
+  test('engine ids show as counter names', () => {
+    const s = placed();
+    s.ships['A-W1'] = s.ships.A1;
+    delete s.ships.A1;
+    assert.match(renderStarPanel(s, 'ur', { viewer: 'ann' }), />W1</);
   });
 
   test('before sides are chosen, a side has no player name', () => {
@@ -152,6 +178,6 @@ describe('sampleGame', () => {
     assert.equal(s.step, 'combat');
     assert.deepEqual(s.contested, ['uruk']);
     const where = Object.fromEntries(Object.entries(s.ships).map(([id, sh]) => [id, `${sh.owner}@${sh.q},${sh.r}`]));
-    assert.deepEqual(where, { A1: 'A@-2,0', A2: 'A@-7,0', B1: 'B@-2,0', B2: 'B@7,0' });
+    assert.deepEqual(where, { 'A-W1': 'A@-2,0', 'A-W2': 'A@-7,0', 'B-W1': 'B@-2,0', 'B-W2': 'B@7,0' });
   });
 });
