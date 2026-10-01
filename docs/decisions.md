@@ -176,12 +176,14 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
   there. Combat only happens on star hexes.
 
 ### D-017 — Spending remaining MP after a forced stop
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §6.1 rule 1; §6.2 items 3–4; §3 event 3
 - **Text:** "Warpships must stop their movement on any STAR HEX occupied by an enemy ship." / "It costs a
   Warpship one movement point to … Drop off one Systemship … Pick up one Systemship during the movement event."
 - **Question:** After being forced to stop, may the Warpship still spend remaining MP to drop or pick up
   Systemships in that hex before combat?
+- **Ruling (2026-09-30):** After a forced stop on a star hex with enemy ships, a Warpship may still spend
+  remaining MP to drop or pick up Systemships in that hex.
 
 ### D-018 — Stacking limits
 - **Status:** RESOLVED
@@ -310,3 +312,51 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
 - **Question:** May a ship name a Beam target with B=0 allocated (or with no Beam built) and, on a hit, deal
   tech-level (and CRT bonus) damage? Or must a Beam be powered at 1 or more to fire?
 - **Ruling (2026-09-30):** A Beam must be powered at 1 or more to fire.
+
+### D-031 — Drive of a Systemship being picked up
+- **Status:** RESOLVED
+- **Where:** §7.3
+- **Text:** "Systemships picked up during a combat round may not fire any weapon during that round, but may power
+  Screens. They may be fired upon by enemy ships."
+- **Question:** The text bars weapons only. May a picked-up Systemship also allocate Drive that round?
+- **Ruling (2026-09-30):** A Systemship picked up in a combat round may power only Screens. Its Drive is 0 that
+  round.
+
+### D-032 — Rack in use for a pickup
+- **Status:** RESOLVED
+- **Where:** §7.3; §5.1; D-021
+- **Text:** "If a Systemship was to be picked up by a Warpship on a given round, but the Warpship is destroyed
+  during that round, the Systemship is not automatically destroyed, but remains on the star hex."
+- **Question:** Is the rack a Warpship is picking up into occupied for that round's hits? Can hits destroy it
+  and so stop the pickup?
+- **Ruling (2026-09-30):** A rack in use for a pickup counts as occupied for that round and cannot take hits. The
+  pickup completes unless the Warpship is destroyed.
+
+### D-033 — Rack freed by a drop
+- **Status:** RESOLVED
+- **Where:** §7.3; §5.1; D-021
+- **Text:** "If the Warpship dropping a Systemship is destroyed on the round it drops the Systemship, the
+  Systemship is NOT destroyed."
+- **Question:** Is the rack a Systemship was just dropped from empty for that round's hits?
+- **Ruling (2026-09-30):** A rack freed by a drop is empty that round and can take hits.
+
+### D-034 — Warpship with only occupied racks left (amends D-021)
+- **Status:** RESOLVED
+- **Where:** §7 step 3; §7.2.2; D-021
+- **Text:** "Any ship that has received enough hits to reduce all its attributes to zero, except for the warp
+  generator, is destroyed."
+- **Question:** If occupied racks cannot take hits (D-021), can a loaded Warpship ever be destroyed?
+- **Ruling (2026-09-30):** Amends D-021. When a Warpship has no hittable attributes left except occupied racks,
+  remaining hits must go to its carried Systemships. A destroyed carried Systemship frees its rack, which can
+  then take hits.
+
+### D-035 — Warpship with only the pickup rack left (amends D-032)
+- **Status:** RESOLVED
+- **Where:** §7.3; §7 step 3; D-032, D-034
+- **Text:** "If a Systemship was to be picked up by a Warpship on a given round, but the Warpship is destroyed
+  during that round, the Systemship is not automatically destroyed, but remains on the star hex."
+- **Question:** D-032 makes the rack in use for a pickup unhittable. Can a Warpship then ever be destroyed on a
+  pickup round, and what happens to the pickup when only that rack is left?
+- **Ruling (2026-09-30):** Amends D-032. A rack in use for a pickup counts as occupied, except when it is the
+  Warpship's last hittable attribute. Then the pickup fails, the rack can take hits, and if the Warpship is
+  destroyed the Systemship remains on the hex (§7.3).

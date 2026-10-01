@@ -1,20 +1,26 @@
 // Warpship movement validation: MP costs, forced stops, the first-turn base restriction.
 // Rules: docs/rules/classic.md §6, §6.1, §6.2. Rulings: D-006, D-008, D-016, D-018 in docs/decisions.md.
-// Not built yet: picking up and dropping Systemships while moving (§6.2 items 3-4, D-017, phase 5b).
+// Systemship pickup and drop while moving: §6.2 items 3-4, D-017.
 
-import { isHex, isAdjacent, starAt, starById, hasWarpline } from './map.js';
+import { isHex, isAdjacent, sameHex, starAt, starById, hasWarpline } from './map.js';
 
 export const FIRST_TURN = 1;
 
 // A path is a list of steps, each costing 1 MP (§6.2):
 //   { type: 'move', to: { q, r } }  one hex to an adjacent hex
 //   { type: 'jump', to: starId }    the full length of a warpline, from one end star to the other
+//   { type: 'pickup', ship: id }    take a friendly Systemship on this star hex aboard (1 MP)
+//   { type: 'drop', ship: id }      leave a carried Systemship on this star hex (1 MP)
+// Pickups and drops are allowed after a forced stop (D-017); a move or jump is not.
 //
-// ship: { owner, WG, PD } (PD is current, after damage). from: the hex it starts on.
-// world: { turn, ships: [{ owner, q, r }] } - game-turn and every counter on the map.
+// ship: { owner, WG, PD, SR?, carrying?: { id: record } } (PD and SR are current, after damage).
+// from: the hex it starts on.
+// world: { turn, ships: [{ owner, q, r, id?, WG? }] } - game-turn and every counter on the map.
+// A Systemship can be picked up only if its counter has an id and WG: false.
 // Returns { errors, cost, end }: errors are { code, message, step? } (step is the index of the
 // offending step), cost is the MP used, end is where the ship stops (null when the path is illegal).
-// An empty path is legal and costs nothing.
+// A path with a pickup or drop also returns cargo: { carried, pickups, drops }, the ids aboard at the end
+// and each { ship, at } that happened. An empty path is legal and costs nothing.
 export function validateMove(map, ship, from, steps, world) {
   if (!isHex(from)) throw new RangeError('Start must be a hex { q, r }');
   if (!Number.isInteger(world.turn) || world.turn < 1) {
@@ -32,7 +38,43 @@ export function validateMove(map, ship, from, steps, world) {
   let here = from;
   let cost = 0;
   let mustStop = false;
+  const carried = Object.keys(ship.carrying ?? {});
+  const loose = world.ships.filter((s) => s.id != null);
+  const pickups = [];
+  const drops = [];
+  let usedCargo = false;
   for (const [i, step] of steps.entries()) {
+    if (step?.type === 'pickup' || step?.type === 'drop') {
+      usedCargo = true;
+      if (!starAt(map, here)) {
+        error('NOT_A_STAR_HEX', 'Systemships may only be picked up or dropped off at a star hex (§6.2, §5.1)', i);
+        break;
+      }
+      if (step.type === 'drop') {
+        if (!carried.includes(step.ship)) {
+          error('NOT_CARRIED', `${step.ship} is not aboard this Warpship`, i);
+          break;
+        }
+        carried.splice(carried.indexOf(step.ship), 1);
+        loose.push({ id: step.ship, owner: ship.owner, WG: false, q: here.q, r: here.r });
+        drops.push({ ship: step.ship, at: { q: here.q, r: here.r } });
+      } else {
+        if ((ship.SR ?? 0) - carried.length < 1) {
+          error('NO_FREE_RACK', 'A Warpship carries one Systemship per undamaged SR (§5.1)', i);
+          break;
+        }
+        const at = loose.findIndex((s) => s.id === step.ship && s.owner === ship.owner && s.WG === false && sameHex(s, here));
+        if (at < 0) {
+          error('NO_SYSTEMSHIP_HERE', `No friendly Systemship ${step.ship} on this hex`, i);
+          break;
+        }
+        loose.splice(at, 1);
+        carried.push(step.ship);
+        pickups.push({ ship: step.ship, at: { q: here.q, r: here.r } });
+      }
+      cost += 1; // §6.2 items 3-4
+      continue;
+    }
     if (mustStop) {
       error('MUST_STOP', 'A Warpship must stop on a star hex occupied by an enemy ship (§6.1 rule 1)', i);
       break;
@@ -77,5 +119,6 @@ export function validateMove(map, ship, from, steps, world) {
   }
 
   if (cost > ship.PD) error('OVER_MP', `Path costs ${cost} MP but PD is ${ship.PD}`);
-  return { errors, cost, end: errors.length === 0 ? here : null };
+  const result = { errors, cost, end: errors.length === 0 ? here : null };
+  return usedCargo ? { ...result, cargo: { carried, pickups, drops } } : result;
 }

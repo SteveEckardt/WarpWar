@@ -1,6 +1,6 @@
 // Damage resolution: hit damage, Screen absorption, applying hits to a ship record.
 // Rules: docs/rules/classic.md §5.2, §7.2.1, §7.2.2. Rulings: docs/decisions.md.
-// Carried Systemships are not modelled yet (D-021); damage to them waits for the phase that builds carrying.
+// Hits on carried Systemships (D-021) are routed by combat.js, which calls applyHits on each carried record.
 
 import { ATTRIBUTES } from './ships.js';
 

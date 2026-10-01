@@ -93,7 +93,7 @@ describe('order validation: other rules', () => {
 
   test('rejects unknown tactics and fields', () => {
     assert.deepEqual(ownCodes(warp, { tactic: 'Attack' }), ['BAD_TACTIC']);
-    assert.deepEqual(ownCodes(warp, { tactic: 'attack', pickup: 'S1' }), ['UNKNOWN_FIELD']);
+    assert.deepEqual(ownCodes(warp, { tactic: 'attack', transfer: 'S1' }), ['UNKNOWN_FIELD']);
   });
 
   test('rejects negative and non-integer power', () => {

@@ -1,6 +1,6 @@
 # Roadmap
 
-Current phase: 5a
+Current phase: 5b
 
 0. Rules extraction: PDF to docs/rules/classic.md, ambiguities logged
 1. Ship building: attributes, BP costs, validation
