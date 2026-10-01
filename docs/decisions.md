@@ -62,7 +62,7 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
 - **Ruling (2026-09-30):** The missile's target is W3.
 
 ### D-006 — Warplines "treated as space hexes" vs. warpline movement
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §6.1 rule 3; §6.2; §6.2.1; §2 SPACE HEX
 - **Text:** "Warplines between stars are treated as space hexes for movement purposes." / "It costs a Warpship
   one movement point to … Move the full distance along a warpline, from the star hex at one end to the star
@@ -70,6 +70,8 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
   through 1818."
 - **Question:** How do rule 3 and §6.2 fit together? Precisely when is a warpline hex an ordinary space hex,
   and when is a warpline traversed for 1 MP?
+- **Ruling (2026-09-30):** Warpline travel starts only at an endpoint star and costs 1 MP to reach the other
+  endpoint. For any other movement, hexes a warpline crosses are ordinary space hexes.
 
 ## B. Turns, scenarios, and victory
 
@@ -86,11 +88,12 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
   during their own Build event.
 
 ### D-008 — "First turn" movement restriction
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §6.1 rule 6
 - **Text:** "Ships may NOT move onto an enemy base star hex during the first turn."
 - **Question:** Does this cover the first game-turn (both players' first player-turns) or only the first
   player-turn of the game?
+- **Ruling (2026-09-30):** "First turn" means game-turn 1, for both players.
 
 ### D-009 — "Effective ships" in the draw condition
 - **Status:** OPEN
@@ -163,12 +166,14 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
 ## D. Movement and the map
 
 ### D-016 — Ending movement in a space hex with enemy ships
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §6.1 rule 2; §3 event 4; §7
 - **Text:** "Warpships may freely move through space hexes occupied by enemy ships." / "Combat MUST occur
   whenever enemy ships occupy the same star hex…"
 - **Question:** May a Warpship end its movement in a space hex that holds enemy ships? If so, confirm that no
   combat happens there.
+- **Ruling (2026-09-30):** A Warpship may end movement in a space hex holding enemy ships. No combat occurs
+  there. Combat only happens on star hexes.
 
 ### D-017 — Spending remaining MP after a forced stop
 - **Status:** OPEN
@@ -179,13 +184,14 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
   Systemships in that hex before combat?
 
 ### D-018 — Stacking limits
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §2; §6 (no stacking rule appears)
 - **Text:** — (the rules are silent)
 - **Question:** Is there any limit on the number of ships (own or mixed) in one hex?
+- **Ruling (2026-09-30):** No stacking limits.
 
 ### D-019 — Map data not present in the text
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §2 Illustration 1; §6.2.1
 - **Text:** "Illustration 1: Classic WarpWar Map Layout" (image only) / "W6 starts its movement on space hex
   1720. It moves onto Umma …, moves along the warpline to Girsu …, moves 3 hexes to Kish" / "W8 starts on hex
@@ -193,6 +199,9 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
 - **Question:** Where will the map come from (hex grid size and numbering, star names and positions, which
   stars are base stars, warpline endpoints)? The text doesn't contain it, and the movement examples can't be
   tested without it.
+- **Ruling (2026-09-30):** The engine takes the map as input. Map data uses axial coordinates. Display IDs like
+  "1720" are strings for humans only. The §6.2.1 examples are recreated on a test map. A playable map comes in
+  Phase 6.
 
 ## E. Combat
 

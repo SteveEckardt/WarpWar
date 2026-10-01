@@ -1,0 +1,17 @@
+{
+  "stars": [
+    { "id": "ur", "name": "Ur", "q": -2, "r": 0, "baseOwner": "A" },
+    { "id": "eridu", "name": "Eridu", "q": -2, "r": 3, "baseOwner": "A" },
+    { "id": "umma", "name": "Umma", "q": 1, "r": 0, "baseOwner": null },
+    { "id": "girsu", "name": "Girsu", "q": 9, "r": 0, "baseOwner": null },
+    { "id": "kish", "name": "Kish", "q": 9, "r": 3, "baseOwner": null },
+    { "id": "nippur", "name": "Nippur", "q": 12, "r": 0, "baseOwner": "B" },
+    { "id": "adab", "name": "Adab", "q": 12, "r": 3, "baseOwner": "B" }
+  ],
+  "warplines": [
+    ["umma", "girsu"],
+    ["girsu", "nippur"],
+    ["ur", "eridu"],
+    ["eridu", "kish"]
+  ]
+}

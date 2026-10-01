@@ -45,7 +45,7 @@ describe('hitDamage (§5.2, §7.2.1)', () => {
     assert.throws(() => hitDamage(beam(0), 2, MISS), RangeError);
   });
 
-  test('escapes results are rejected (D-025 is open)', () => {
+  test('escapes results are rejected here; combat turns a Missile Escapes into a Miss first (D-025)', () => {
     assert.throws(() => hitDamage(missile, 0, { result: 'escapes', bonus: 0 }), RangeError);
   });
 
