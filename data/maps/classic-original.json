@@ -1,0 +1,220 @@
+{
+  "stars": [
+    {
+      "id": "ur",
+      "name": "Ur",
+      "q": -11,
+      "r": 0,
+      "baseOwner": "A"
+    },
+    {
+      "id": "eridu",
+      "name": "Eridu",
+      "q": -9,
+      "r": -4,
+      "baseOwner": "A"
+    },
+    {
+      "id": "larsa",
+      "name": "Larsa",
+      "q": -13,
+      "r": 4,
+      "baseOwner": "A"
+    },
+    {
+      "id": "nippur",
+      "name": "Nippur",
+      "q": 11,
+      "r": 0,
+      "baseOwner": "B"
+    },
+    {
+      "id": "adab",
+      "name": "Adab",
+      "q": 9,
+      "r": 4,
+      "baseOwner": "B"
+    },
+    {
+      "id": "akkad",
+      "name": "Akkad",
+      "q": 13,
+      "r": -4,
+      "baseOwner": "B"
+    },
+    {
+      "id": "isin",
+      "name": "Isin",
+      "q": -7,
+      "r": 0,
+      "baseOwner": null
+    },
+    {
+      "id": "umma",
+      "name": "Umma",
+      "q": 7,
+      "r": 0,
+      "baseOwner": null
+    },
+    {
+      "id": "uruk",
+      "name": "Uruk",
+      "q": -2,
+      "r": 0,
+      "baseOwner": null
+    },
+    {
+      "id": "girsu",
+      "name": "Girsu",
+      "q": 2,
+      "r": 0,
+      "baseOwner": null
+    },
+    {
+      "id": "lagash",
+      "name": "Lagash",
+      "q": 1,
+      "r": -2,
+      "baseOwner": null
+    },
+    {
+      "id": "sippar",
+      "name": "Sippar",
+      "q": -1,
+      "r": 2,
+      "baseOwner": null
+    },
+    {
+      "id": "kutha",
+      "name": "Kutha",
+      "q": -2,
+      "r": -4,
+      "baseOwner": null
+    },
+    {
+      "id": "borsippa",
+      "name": "Borsippa",
+      "q": -6,
+      "r": 4,
+      "baseOwner": null
+    },
+    {
+      "id": "shuruppak",
+      "name": "Shuruppak",
+      "q": 2,
+      "r": 4,
+      "baseOwner": null
+    },
+    {
+      "id": "mari",
+      "name": "Mari",
+      "q": 6,
+      "r": -4,
+      "baseOwner": null
+    },
+    {
+      "id": "nuzi",
+      "name": "Nuzi",
+      "q": 3,
+      "r": -6,
+      "baseOwner": null
+    },
+    {
+      "id": "dilmun",
+      "name": "Dilmun",
+      "q": -3,
+      "r": 6,
+      "baseOwner": null
+    }
+  ],
+  "warplines": [
+    [
+      "ur",
+      "isin"
+    ],
+    [
+      "nippur",
+      "umma"
+    ],
+    [
+      "ur",
+      "eridu"
+    ],
+    [
+      "nippur",
+      "akkad"
+    ],
+    [
+      "ur",
+      "larsa"
+    ],
+    [
+      "nippur",
+      "adab"
+    ],
+    [
+      "isin",
+      "uruk"
+    ],
+    [
+      "umma",
+      "girsu"
+    ],
+    [
+      "eridu",
+      "kutha"
+    ],
+    [
+      "akkad",
+      "mari"
+    ],
+    [
+      "larsa",
+      "borsippa"
+    ],
+    [
+      "adab",
+      "shuruppak"
+    ],
+    [
+      "kutha",
+      "nuzi"
+    ],
+    [
+      "shuruppak",
+      "dilmun"
+    ],
+    [
+      "borsippa",
+      "sippar"
+    ],
+    [
+      "mari",
+      "lagash"
+    ],
+    [
+      "uruk",
+      "kutha"
+    ],
+    [
+      "girsu",
+      "shuruppak"
+    ],
+    [
+      "uruk",
+      "borsippa"
+    ],
+    [
+      "girsu",
+      "mari"
+    ],
+    [
+      "uruk",
+      "sippar"
+    ],
+    [
+      "girsu",
+      "lagash"
+    ]
+  ]
+}

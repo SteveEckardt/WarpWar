@@ -96,21 +96,25 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
 - **Ruling (2026-09-30):** "First turn" means game-turn 1, for both players.
 
 ### D-009 — "Effective ships" in the draw condition
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §3 event 1; §4.1; §4.2
 - **Text:** "In the Learning and Basic scenarios, it is possible for a game to end in a draw. This occurs when
   neither player has any effective ships left." / "if neither player has effective ships remaining at some
   point in play"
 - **Question:** What makes a ship "effective"? (For example, a ship with PD=0; a Systemship with no Warpship
   able to carry it; a ship that can move but has no weapons.) When is the draw checked?
+- **Ruling (2026-09-30):** A ship is "effective" if it can fire a weapon or move. A draw occurs when neither
+  player has an effective ship, checked at the start of each player-turn.
 
 ### D-010 — What counts as occupying a base star for victory points
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §3 event 1; §4.1
 - **Text:** "Count one victory point for each enemy base star hex your ship(s) occupy NOW, at the BEGINNING of
   your turn."
 - **Question:** Does any ship count, including a Systemship or a ship with only some attributes left? Does a
   Systemship carried aboard a Warpship in the hex add anything?
+- **Ruling (2026-09-30):** Any surviving ship on an enemy base star occupies it, including a Systemship or a
+  damaged ship. Carried Systemships add nothing. Victory points count per hex, not per ship.
 
 ### D-011 — Tech level when Technology rules are not used
 - **Status:** RESOLVED
@@ -133,7 +137,7 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
 ## C. Building, repair, and resupply
 
 ### D-013 — "Base star hexes that you control"
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §3 event 2; §5.3
 - **Text:** "Newly built ships are placed on any of YOUR base star hexes that you control at that time." / "A
   ship must have started the turn on one of the player's base star hexes in order to be eligible for repair or
@@ -141,6 +145,8 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
 - **Question:** What does "control" mean? Is a friendly base with enemy ships on it (e.g., left there after
   the enemy's turn) still controlled? Does the repair rule also need "control"? May captured enemy bases
   ever be used?
+- **Ruling (2026-09-30):** A base star is controlled if no enemy ships are on it. New ships may only be placed on
+  controlled base stars. Captured enemy bases are never usable.
 
 ### D-014 — Minimum legal ship
 - **Status:** RESOLVED
