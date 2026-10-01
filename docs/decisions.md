@@ -197,7 +197,7 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
 ## E. Combat
 
 ### D-020 — Carried Systemships during combat
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §5.1 SYSTEMSHIPS; §7 step 1; §7.3
 - **Text:** "When a Systemship is being carried by a Warpship, its number is noted on the Warpship's record
   sheet, and the Systemship's counter does NOT appear on the map." / "Each player writes an 'order' for each of
@@ -205,6 +205,8 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
   on) that combat round."
 - **Question:** Does a Systemship carried aboard a Warpship in a contested hex get orders, fire, or get
   targeted? Or does it take no part until dropped?
+- **Ruling (2026-09-30):** Carried Systemships take no part in combat. They cannot fire or be targeted until
+  dropped.
 
 ### D-021 — Systemship Rack damage while carrying
 - **Status:** RESOLVED
@@ -218,59 +220,68 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
   Systemships is left for the phase that builds carrying.
 
 ### D-022 — Retreat or forced withdrawal into a hex with enemy ships
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §7 step 4; §7 step 6(c)
 - **Text:** "Ships that successfully retreated are moved to any hex adjacent to the star hex." / "the player
   whose turn it is must withdraw all his ships from that star hex to any hex(es) adjacent to that star hex."
 - **Question:** Who chooses the hex? May it be a star hex that holds enemy ships, and if so, is there a new
   combat this turn? Are any adjacent hexes forbidden (for example, an enemy base star on the first turn per
   §6.1 rule 6)?
+- **Ruling (2026-09-30):** The retreating owner picks the destination hex. It may not be a star hex with enemy
+  ships, or an enemy base star on the first turn.
 
 ### D-023 — Forced withdrawal with Systemships that can't be carried
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §7 step 6(c)
 - **Text:** "(Systemships are assumed picked up by any Warpship you wish.)"
 - **Question:** What happens to the phasing player's Systemships in the hex if there is too little free SR
   capacity, or no Warpship there?
+- **Ruling (2026-09-30):** Systemships that cannot be carried on forced withdrawal are destroyed.
 
 ### D-024 — ESCAPE when no enemy ship fired on the retreating ship
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §7.2.1 ESCAPES
 - **Text:** "In order to ESCAPE, a retreating ship must simultaneously obtain the ESCAPE result against EACH
   enemy ship (not missile) that fired on it."
 - **Question:** If no enemy ship fired a Beam at the retreating ship, does it escape automatically, or can it
   not escape? If an enemy ship fired only Missiles at it, does that ship count as having "fired on it", and
   against what CRT cell?
+- **Ruling (2026-09-30):** Only Beam fire counts toward escape. A ship with no enemy Beam fire on it escapes
+  automatically.
 
 ### D-025 — "Escapes" result from a Missile
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §7.2 CRT (Attacking row, Retreating column); §7.2.1
 - **Text:** CRT Attacking row gives "Escapes" at "-3 or less" and "-1, -2" against a Retreating target;
   "Missile Fire: … read at … the firing ship's ATTACK row." / "EACH enemy ship (not missile)"
 - **Question:** When a Missile's lookup lands on "Escapes", what is the result for that Missile (a miss?), and
   does it have any effect on whether the target escapes?
+- **Ruling (2026-09-30):** A Missile result of Escapes is a Miss. It does not affect escape.
 
 ### D-026 — Hit and escape in the same round
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §7 steps 3–4; §7.2.1
 - **Text:** Step 3 "Players apply the results of weapon hits to the ships." then step 4 "Ships that
   successfully retreated are moved to any hex adjacent to the star hex."
 - **Question:** A retreating ship gets ESCAPES from every enemy ship's Beam but is hit by a Missile. Does it
   take the damage and still escape (if it survives)? Does a Missile hit affect the escape?
+- **Ruling (2026-09-30):** A retreating ship hit by Missiles takes the damage and still escapes if it survives.
 
 ### D-027 — Scope of "one Systemship per combat round"
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §7.3
 - **Text:** "Only one Systemship may be picked up or dropped per combat round."
 - **Question:** Is the limit one per Warpship per round, or one per player per round?
+- **Ruling (2026-09-30):** One Systemship per Warpship per combat round.
 
 ### D-028 — Pickup on the round the Warpship escapes
-- **Status:** OPEN
+- **Status:** RESOLVED
 - **Where:** §7.3
 - **Text:** "If the Warpship successfully retreats on the round it drops a Systemship, the Systemship stays in
   the star hex." (No corresponding statement for pickup.)
 - **Question:** If a Warpship picks up a Systemship and successfully retreats in the same round, does the
   Systemship leave with it?
+- **Ruling (2026-09-30):** A Systemship picked up on the round its Warpship escapes leaves with it.
 
 ### D-029 — Missiles fired this round used to absorb this round's hits
 - **Status:** RESOLVED
