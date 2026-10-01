@@ -12,7 +12,7 @@
 // Inside 'combat', state.combat is null while the phasing player picks the next contested star, otherwise
 // { star, round, stage, hex, ... } with stage 'orders', 'hits', 'retreats' or 'withdraw'.
 
-import { loadMap, starAt, starById, isHex, isAdjacent, sameHex } from './map.js';
+import { loadMap, starAt, starById, isHex, isAdjacent, sameHex, onMap } from './map.js';
 import { createShip, shipCost, validateShip } from './ships.js';
 import { validateMove, FIRST_TURN } from './movement.js';
 import { createHex, validateOrders, hitsOwed, checkHitAllocation, resolveRound } from './combat.js';
@@ -158,6 +158,7 @@ const victoryPoints = (s, side) =>
 function checkDestination(s, side, from, to, id) {
   if (!isHex(to)) reject('BAD_HEX', `${id}: a destination is a hex { q, r }`);
   if (!isAdjacent(from, to)) reject('NOT_ADJACENT', `${id}: the destination must be adjacent to the star hex`);
+  if (!onMap(s.map, to)) reject('OFF_MAP', `${id}: the destination is off the map (D-040)`);
   const star = starAt(s.map, to);
   if (star && enemyAt(s, side, to)) reject('ENEMY_STAR', `${id}: ${star.name} holds enemy ships (D-022)`);
   if (star && s.turn === FIRST_TURN && star.baseOwner != null && star.baseOwner !== side) {
@@ -248,13 +249,7 @@ function move(s, action) {
   if (s.moved.includes(id)) reject('ALREADY_MOVED', `${id} has already moved this turn`);
   if (!Array.isArray(action.path)) reject('BAD_PATH', 'A move needs a path: a list of steps');
 
-  const world = {
-    turn: s.turn,
-    ships: Object.entries(s.ships)
-      .filter(([key]) => key !== id)
-      .map(([key, sh]) => ({ id: key, owner: sh.owner, WG: sh.WG, q: sh.q, r: sh.r })),
-  };
-  const result = validateMove(s.map, ship, { q: ship.q, r: ship.r }, action.path, world);
+  const result = previewMove(s, id, action.path);
   if (result.errors.length > 0) reject(result.errors[0].code, `${id}: ${result.errors[0].message}`);
 
   ship.q = result.end.q;
@@ -273,6 +268,20 @@ function move(s, action) {
     }
   }
   s.moved.push(id);
+}
+
+// What a move would do, without doing it: validateMove against every other counter on the map. The move
+// action makes the same check. Returns validateMove's result, or null if there is no such ship on the map.
+export function previewMove(state, id, path) {
+  const ship = state.ships[id];
+  if (!ship) return null;
+  const world = {
+    turn: state.turn,
+    ships: Object.entries(state.ships)
+      .filter(([key]) => key !== id)
+      .map(([key, sh]) => ({ id: key, owner: sh.owner, WG: sh.WG, q: sh.q, r: sh.r })),
+  };
+  return validateMove(state.map, ship, { q: ship.q, r: ship.r }, path, world);
 }
 
 function endMovement(s, action) {

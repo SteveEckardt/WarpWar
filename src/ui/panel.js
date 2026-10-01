@@ -28,13 +28,24 @@ const counterRow = (id, ship) =>
   `<tr><th scope="row">${esc(displayId(id))}</th><td>${typeOf(ship)}</td><td colspan="${ATTRIBUTES.length + 1}" class="hidden">Record hidden</td></tr>`;
 
 // options.viewer: the player at the screen, who sees their own records (D-039).
-export function renderStarPanel(state, starId, { viewer = null } = {}) {
+export function renderStarPanel(state, starId, options = {}) {
   const star = state.map.stars.find((s) => s.id === starId);
   if (!star) return `<p class="hint">Click a star to see the ships there.</p>`;
+  return renderHexPanel(state, star, options);
+}
+
+// Any hex: a star hex shows the star, a space hex its position. Then the ships there, by side.
+export function renderHexPanel(state, hex, { viewer = null } = {}) {
+  const star = state.map.stars.find((s) => s.q === hex.q && s.r === hex.r);
   const out = [];
-  out.push(`<h2>${esc(star.name)}</h2>`);
-  out.push(`<p class="meta">Hex ${star.q}, ${star.r} · ${star.baseOwner ? `Base star of side ${esc(star.baseOwner)}` : 'Star'}</p>`);
-  const here = shipsAt(state, star);
+  if (star) {
+    out.push(`<h2>${esc(star.name)}</h2>`);
+    out.push(`<p class="meta">Hex ${star.q}, ${star.r} · ${star.baseOwner ? `Base star of side ${esc(star.baseOwner)}` : 'Star'}</p>`);
+  } else {
+    out.push(`<h2>Space hex</h2>`);
+    out.push(`<p class="meta">Hex ${hex.q}, ${hex.r}</p>`);
+  }
+  const here = shipsAt(state, hex);
   if (here.length === 0) {
     out.push(`<p class="hint">No ships here.</p>`);
     return out.join('\n');

@@ -36,8 +36,11 @@ warpline costs 1 MP whatever its length, §6.2, D-006). `loadMap` then accepted 
 
 ## Coordinates
 
-Axial `(q, r)`. For the sketch, a star is drawn at column `x = q + r/2` and row `r`. The map spans x = -11 to
+Axial `(q, r)`. For the sketch, a star is drawn at column `x = q + r/2` and row `r`. The stars span x = -11 to
 +11 and r = -6 to +6. Base stars are 22 hexes apart end to end.
+
+The map edge (D-040) is 2 hexes beyond the outermost stars: x = -13 to +13 and r = -8 to +8, edges included. It
+is stored as `bounds` in the JSON. No ship may move, retreat or withdraw off the map.
 
 ## ASCII sketch
 
@@ -168,7 +171,7 @@ Distances from A's bases to the neutral stars (B's are the same by symmetry):
   base; a ship with PD 8 or more can in one, but not on game-turn 1 (D-008). If you want slower or faster, the
   lever is the number of warplines on the centre lane (Isin - Uruk, and the Uruk and Girsu hub lines).
 
-## JSON (Phase 5a format)
+## JSON (Phase 5a format, with D-040 bounds)
 
 ```json
 {
@@ -204,6 +207,7 @@ Distances from A's bases to the neutral stars (B's are the same by symmetry):
     ["uruk", "kutha"], ["girsu", "shuruppak"],
     ["uruk", "borsippa"], ["girsu", "mari"],
     ["uruk", "sippar"], ["girsu", "lagash"]
-  ]
+  ],
+  "bounds": { "x": [-13, 13], "r": [-8, 8] }
 }
 ```

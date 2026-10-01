@@ -1,8 +1,8 @@
 // Warpship movement validation: MP costs, forced stops, the first-turn base restriction.
-// Rules: docs/rules/classic.md §6, §6.1, §6.2. Rulings: D-006, D-008, D-016, D-018 in docs/decisions.md.
+// Rules: docs/rules/classic.md §6, §6.1, §6.2. Rulings: D-006, D-008, D-016, D-018, D-040 in docs/decisions.md.
 // Systemship pickup and drop while moving: §6.2 items 3-4, D-017.
 
-import { isHex, isAdjacent, sameHex, starAt, starById, hasWarpline } from './map.js';
+import { isHex, isAdjacent, sameHex, starAt, starById, hasWarpline, onMap } from './map.js';
 
 export const FIRST_TURN = 1;
 
@@ -87,6 +87,10 @@ export function validateMove(map, ship, from, steps, world) {
       }
       if (!isAdjacent(here, step.to)) {
         error('NOT_ADJACENT', 'A move goes to an adjacent hex', i);
+        break;
+      }
+      if (!onMap(map, step.to)) {
+        error('OFF_MAP', 'A ship may not leave the map (D-040)', i);
         break;
       }
       to = { q: step.to.q, r: step.to.r };

@@ -202,3 +202,21 @@ describe('first-turn restriction (D-008)', () => {
     assert.deepEqual(validateMove(map, warpship(3, 'A'), H[1720], [move(H.Umma)], world(1)).errors, []);
   });
 });
+
+// D-040: a move may not leave the map. The test map has no edge, so a bounded copy is used: rows -2 to 4.
+describe('map edge (D-040)', () => {
+  const edged = loadMap({ ...JSON.parse(readFileSync(new URL('./fixtures/test-map.json', import.meta.url), 'utf8')), bounds: { x: [-3, 14], r: [-2, 4] } });
+
+  test('a step off the edge is rejected at that step', () => {
+    const r = validateMove(edged, warpship(5), { q: 0, r: -2 }, [move({ q: 1, r: -2 }), move({ q: 1, r: -3 })], world());
+    assert.deepEqual(codes(r), ['OFF_MAP']);
+    assert.equal(r.errors[0].step, 1);
+    assert.equal(r.end, null);
+  });
+
+  test('moving along the edge is legal', () => {
+    const r = validateMove(edged, warpship(5), { q: 0, r: -2 }, [move({ q: 1, r: -2 }), move({ q: 2, r: -2 })], world());
+    assert.deepEqual(codes(r), []);
+    assert.deepEqual(r.end, { q: 2, r: -2 });
+  });
+});

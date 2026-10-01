@@ -414,3 +414,16 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
   only what the counters show: position, Warpship or Systemship, and the counter number. They do not see enemy
   records, enemy Build Point spending, or the Systemships an enemy Warpship carries. All records are shown when
   the game is over. In a shared-screen game, private views sit behind a "pass to <player>" handoff screen.
+
+### D-040 — Map edges
+- **Status:** RESOLVED
+- **Where:** §2 THE MAP; §6; D-019
+- **Text:** "THE MAP is divided into hexagons ('hexes') which control movement." / "the 8.5\" by 14\" hex-grid play
+  map" / D-019: "The engine takes the map as input. Map data uses axial coordinates."
+- **Question:** The printed map is a finite sheet, but map data lists only stars and warplines, so the engine
+  accepts a move to any hex however far from the stars. Does the map have an edge that ships may not cross? If
+  so, where is it on data/maps/classic-original.json, and is it part of the map data or fixed by the engine?
+- **Ruling (2026-10-01):** The map has an edge, and it is part of the map data: `bounds: { x: [min, max], r:
+  [min, max] }`, where x = q + r/2 is the column and r the row, edges included. On the original map it is the
+  area the renderers already draw, the stars plus 2 hexes all round: x from -13 to 13, r from -8 to 8. A move,
+  retreat or withdrawal may not end a step off the map. A map without bounds (the test maps) has no edge.

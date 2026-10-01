@@ -109,3 +109,14 @@ td.hidden { text-align: left; color: var(--muted); font-style: italic; }
 #handoff .card {
   max-width: 420px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 24px; text-align: center;
 }
+
+/* Phase 7c: movement */
+#map .hex { cursor: pointer; }
+#map .hex:hover { fill: #1d2c47; }
+#map .target { fill: rgba(250, 204, 21, 0.18); stroke: #facc15; stroke-width: 2; cursor: pointer; }
+#map .target.jump { fill: rgba(250, 204, 21, 0.3); }
+#map .target:focus { outline: none; }
+#map .target:hover, #map .target:focus-visible { fill: rgba(250, 204, 21, 0.45); }
+.steps { margin: 6px 0; padding-left: 22px; }
+.buttons { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+table.movers td:last-child { text-align: right; }

@@ -3,12 +3,13 @@
 // the player who must act says they are at the screen. Add ?sample to the URL to load the Phase 7a sample game.
 
 import { createGame, applyAction } from '../engine/game.js';
-import { renderMap } from './hexmap.js';
-import { renderStarPanel, renderStatus } from './panel.js';
+import { starAt } from '../engine/map.js';
+import { renderMap, esc } from './hexmap.js';
+import { renderHexPanel, renderStatus } from './panel.js';
 import { renderNewGame, renderChooseSide } from './setup.js';
 import { EMPTY_DESIGN, nextShipId, buildAction, renderBuilder, renderDesignSummary } from './builder.js';
+import { renderMovement, planInfo } from './movement.js';
 import { actor } from './view.js';
-import { esc } from './hexmap.js';
 import { sampleGame } from './sample.js';
 
 const $ = (id) => document.getElementById(id);
@@ -23,7 +24,8 @@ const ui = {
   preview: null, // an empty Learning game, for showing the map before setup
   game: null,
   viewer: null, // the player who last said they are at the screen
-  selected: null,
+  selected: null, // the hex { q, r } whose ships the panel shows
+  plan: null, // the move being planned: { ship, steps }
   setup: {},
   design: { ...EMPTY_DESIGN },
   drafts: [],
@@ -37,24 +39,27 @@ function actionsHtml() {
   if (!g) return renderNewGame(ui.setup);
   if (g.step === 'setup') return renderChooseSide(g);
   if (g.step === 'build') return renderBuilder(g, ui.viewer, ui);
-  if (g.step === 'movement' || g.step === 'rearrange') {
+  if (g.step === 'movement') return renderMovement(g, ui.viewer, ui);
+  if (g.step === 'combat') return `<h2>Combat</h2><p class="hint">Combat comes in Phase 7d.</p>`;
+  if (g.step === 'rearrange') {
     return [
-      `<h2>Movement</h2>`,
-      `<p class="hint">Moving ships comes in Phase 7c. For now you can only end your turn.</p>`,
+      `<h2>End of turn</h2>`,
+      `<p class="hint">Movement and combat are over for this turn.</p>`,
       ui.error ? `<p class="error" role="alert">${esc(ui.error)}</p>` : '',
       `<button type="button" class="primary" data-action="end-turn">End turn</button>`,
     ].join('\n');
   }
-  if (g.step === 'combat') return `<h2>Combat</h2><p class="hint">Combat comes in Phase 7d.</p>`;
   return '';
 }
 
 function render() {
   const state = ui.game ?? ui.preview;
-  statusEl.innerHTML = ui.game ? renderStatus(ui.game) : 'Set up a new game';
-  mapEl.innerHTML = renderMap(state, { selected: ui.selected });
-
   const hide = needsHandoff();
+  statusEl.innerHTML = ui.game ? renderStatus(ui.game) : 'Set up a new game';
+  const plan = ui.plan && !hide ? planInfo(ui.game, ui.plan.ship, ui.plan.steps) : null;
+  const star = ui.selected ? starAt(state.map, ui.selected) : null;
+  mapEl.innerHTML = renderMap(state, { selected: star?.id ?? null, selectedHex: star ? null : ui.selected, plan });
+
   handoffEl.hidden = !hide;
   mainEl.inert = hide;
   if (hide) {
@@ -64,8 +69,8 @@ function render() {
     handoffEl.querySelector('button').focus();
     return;
   }
-  const star = ui.selected ? renderStarPanel(state, ui.selected, { viewer: ui.viewer }) : `<p class="hint">Click a star to see the ships there.</p>`;
-  panelEl.innerHTML = `<div class="actions">${actionsHtml()}</div><div class="star-info">${star}</div>`;
+  const info = ui.selected ? renderHexPanel(state, ui.selected, { viewer: ui.viewer }) : `<p class="hint">Click a star or hex to see the ships there.</p>`;
+  panelEl.innerHTML = `<div class="actions">${actionsHtml()}</div><div class="star-info">${info}</div>`;
 }
 
 // Applies an action; on rejection keeps the message for the panel. Returns true if accepted.
@@ -105,6 +110,7 @@ function readDesign(form) {
 const handlers = {
   reveal() {
     ui.viewer = actor(ui.game);
+    ui.plan = null;
     ui.design = { ...EMPTY_DESIGN };
     ui.drafts = [];
     ui.error = null;
@@ -129,10 +135,32 @@ const handlers = {
   build() {
     if (act(buildAction(ui.viewer, ui.drafts))) ui.drafts = [];
   },
-  // A stand-in until Phase 7c: end movement without moving, then end the turn.
+  plan(el) {
+    const ship = ui.game.ships[el.dataset.id];
+    ui.plan = { ship: el.dataset.id, steps: [] };
+    ui.selected = { q: ship.q, r: ship.r };
+    ui.error = null;
+  },
+  'undo-step'() {
+    ui.plan = { ...ui.plan, steps: ui.plan.steps.slice(0, -1) };
+    ui.error = null;
+  },
+  'cancel-plan'() {
+    ui.plan = null;
+    ui.error = null;
+  },
+  'confirm-move'() {
+    const { ship, steps } = ui.plan;
+    if (act({ type: 'move', player: ui.viewer, ship, path: steps })) {
+      ui.plan = null;
+      ui.selected = { q: ui.game.ships[ship].q, r: ui.game.ships[ship].r };
+    }
+  },
+  'end-movement'() {
+    act({ type: 'endMovement', player: ui.viewer });
+  },
   'end-turn'() {
-    const player = ui.viewer;
-    if (act({ type: 'endMovement', player }) && ui.game.step === 'rearrange') act({ type: 'endTurn', player });
+    act({ type: 'endTurn', player: ui.viewer });
   },
 };
 
@@ -143,20 +171,36 @@ document.addEventListener('click', (e) => {
     render();
     return;
   }
-  const star = e.target.closest('#map [data-star]');
-  if (star) {
-    ui.selected = star.dataset.star;
-    render();
-    mapEl.querySelector(`[data-star="${CSS.escape(ui.selected)}"]`)?.focus();
+  // A highlighted target while planning: add that step to the path.
+  const target = e.target.closest('#map [data-target]');
+  if (target && ui.plan) {
+    const t = planInfo(ui.game, ui.plan.ship, ui.plan.steps).targets[Number(target.dataset.target)];
+    if (t) {
+      ui.plan = { ...ui.plan, steps: [...ui.plan.steps, t.step] };
+      ui.selected = t.to;
+      ui.error = null;
+      render();
+      mapEl.querySelector('[data-target]')?.focus();
+    }
+    return;
   }
+  // Any other star or hex: show the ships there.
+  const starEl = e.target.closest('#map [data-star]');
+  const hexEl = e.target.closest('#map [data-hex]');
+  if (!starEl && !hexEl) return;
+  const star = starEl && (ui.game ?? ui.preview).map.stars.find((s) => s.id === starEl.dataset.star);
+  const [q, r] = star ? [star.q, star.r] : hexEl.dataset.hex.split(',').map(Number);
+  ui.selected = { q, r };
+  render();
+  if (star) mapEl.querySelector(`[data-star="${CSS.escape(star.id)}"]`)?.focus();
 });
 
 mapEl.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' && e.key !== ' ') return;
-  const star = e.target.closest('[data-star]');
-  if (!star) return;
+  const el = e.target.closest('[data-star], [data-target]');
+  if (!el) return;
   e.preventDefault();
-  star.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 });
 
 document.addEventListener('submit', (e) => {

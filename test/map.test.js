@@ -11,6 +11,7 @@ import {
   starAt,
   starById,
   hasWarpline,
+  onMap,
 } from '../src/engine/map.js';
 
 const raw = JSON.parse(readFileSync(new URL('./fixtures/test-map.json', import.meta.url), 'utf8'));
@@ -145,5 +146,57 @@ describe('map validation', () => {
     assert.deepEqual(input, snapshot);
     assert.equal(map.stars[0].baseOwner, null);
     assert.deepEqual(map.warplines, []);
+  });
+});
+
+// D-040: the map edge is part of the map data. bounds: { x: [min, max], r: [min, max] }, where x = q + r/2 is the
+// column (as in docs/maps/classic-original.md) and r the row. A hex is on the map if both lie inside, inclusive.
+describe('map edge (D-040)', () => {
+  const bounded = (bounds, stars = [star('a', 0, 0)]) => ({ stars, bounds });
+
+  test('a map without bounds has no edge', () => {
+    const map = loadMap({ stars: [star('a', 0, 0)] });
+    assert.equal(map.bounds, null);
+    assert.equal(onMap(map, { q: 1000, r: -1000 }), true);
+  });
+
+  test('legal bounds load and are copied', () => {
+    const input = bounded({ x: [-2, 2], r: [-1, 1] });
+    const map = loadMap(input);
+    assert.deepEqual(map.bounds, { x: [-2, 2], r: [-1, 1] });
+    assert.notEqual(map.bounds.x, input.bounds.x);
+  });
+
+  test('on the map: row within r, column q + r/2 within x, edges included', () => {
+    const map = loadMap(bounded({ x: [-2, 2], r: [-1, 1] }));
+    assert.equal(onMap(map, { q: 2, r: 0 }), true);
+    assert.equal(onMap(map, { q: 3, r: 0 }), false);
+    assert.equal(onMap(map, { q: -2, r: 0 }), true);
+    assert.equal(onMap(map, { q: 1, r: 1 }), true, 'column 1.5');
+    assert.equal(onMap(map, { q: 2, r: 1 }), false, 'column 2.5');
+    assert.equal(onMap(map, { q: -2, r: 1 }), true, 'column -1.5');
+    assert.equal(onMap(map, { q: -3, r: 1 }), false, 'column -2.5');
+    assert.equal(onMap(map, { q: 0, r: 2 }), false);
+    assert.equal(onMap(map, { q: 0, r: -1 }), true);
+  });
+
+  test('rejects malformed bounds', () => {
+    for (const bounds of [null, [], { x: [0, 1] }, { x: [0, 1], r: [0] }, { x: [0.5, 1], r: [0, 1] }, { x: [1, 0], r: [0, 1] }, { x: [0, 1], r: [0, 1], q: [0, 1] }]) {
+      assert.deepEqual(codes(validateMap(bounded(bounds))), ['BAD_BOUNDS'], JSON.stringify(bounds));
+    }
+  });
+
+  test('every star must be on the map', () => {
+    assert.deepEqual(codes(validateMap(bounded({ x: [-1, 1], r: [-1, 1] }, [star('a', 0, 0), star('b', 2, 0)]))), ['STAR_OFF_MAP']);
+  });
+
+  test('the original map: the area the renderers draw, stars plus 2 hexes all round', () => {
+    const data = JSON.parse(readFileSync(new URL('../data/maps/classic-original.json', import.meta.url), 'utf8'));
+    assert.deepEqual(data.bounds, { x: [-13, 13], r: [-8, 8] });
+    const map = loadMap(data);
+    const xs = map.stars.map((s) => s.q + s.r / 2);
+    const rs = map.stars.map((s) => s.r);
+    assert.deepEqual([Math.min(...xs) - 2, Math.max(...xs) + 2], map.bounds.x);
+    assert.deepEqual([Math.min(...rs) - 2, Math.max(...rs) + 2], map.bounds.r);
   });
 });

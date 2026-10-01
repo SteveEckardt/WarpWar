@@ -1,7 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createGame, applyAction, SCENARIOS } from '../src/engine/game.js';
+import { createGame, applyAction, previewMove, SCENARIOS } from '../src/engine/game.js';
 
 // Phase 6b: turn sequence (§3), setup (§4), the Learning scenario (§4.1). Rulings D-007 to D-013, D-022.
 // Expected values are worked out by hand from docs/rules/classic.md and docs/maps/classic-original.md.
@@ -360,6 +360,29 @@ describe('illegal actions: Movement (§6, D-008)', () => {
   });
 });
 
+describe('previewMove: the same check the move action makes', () => {
+  test('a legal path: cost and end, nothing changed', () => {
+    const s = play(setupWin(), { type: 'build', player: 'ann', ships: [{ id: 'A1', design: A1, at: 'ur' }] });
+    const before = structuredClone(s);
+    const r = previewMove(s, 'A1', [jump('isin'), jump('uruk')]);
+    assert.deepEqual(r.errors, []);
+    assert.equal(r.cost, 2);
+    assert.deepEqual(r.end, URUK);
+    assert.deepEqual(s, before);
+  });
+
+  test('sees the other ships: must stop on a star with an enemy ship (§6.1 rule 1)', () => {
+    const s = play(winTurn1A(), { type: 'endTurn', player: 'ann' }, { type: 'build', player: 'bob', ships: [{ id: 'B1', design: B1, at: 'nippur' }, { id: 'B2', design: B2, at: 'nippur' }] });
+    const path = [jump('umma'), jump('girsu'), move(1, 0), move(0, 0), move(-1, 0), move(-2, 0)];
+    assert.deepEqual(previewMove(s, 'B1', path).errors, []);
+    assert.deepEqual(previewMove(s, 'B1', [...path, move(-3, 0)]).errors.map((e) => e.code), ['MUST_STOP']);
+  });
+
+  test('an unknown ship is null', () => {
+    assert.equal(previewMove(setupWin(), 'nope', []), null);
+  });
+});
+
 describe('illegal actions: Combat (§7, D-022)', () => {
   test('the phasing player picks the contested star; only a contested star', () => {
     const s = winTurn1BMoved();
@@ -402,6 +425,19 @@ describe('illegal actions: Combat (§7, D-022)', () => {
     crowded.map.stars.push({ id: 'x', name: 'X', q: 12, r: -1, baseOwner: null });
     crowded.ships.A9 = { ...crowded.ships.A1, q: 12, r: -1 };
     rejects(crowded, { type: 'placeRetreats', player: 'bob', destinations: { B2: { q: 12, r: -1 } } }, 'ENEMY_STAR');
+  });
+
+  test('retreat and withdrawal hexes must be on the map (D-040)', () => {
+    // Bounds pulled in so that column 12 (q 12, r 0, next to Nippur) is off the map.
+    const s = winTurn2ACombat();
+    s.map.bounds = { x: [-13, 11], r: [-8, 8] };
+    rejects(s, { type: 'placeRetreats', player: 'bob', destinations: { B2: { q: 12, r: 0 } } }, 'OFF_MAP');
+    play(s, { type: 'placeRetreats', player: 'bob', destinations: { B2: { q: 10, r: 1 } } });
+    // Forced withdrawal from Girsu (column 2) with column 3 cut off.
+    const w = drawCombat();
+    w.map.bounds = { x: [-13, 2], r: [-8, 8] };
+    rejects(w, { type: 'withdraw', player: 'bob', destinations: { A1: { q: 3, r: 0 } } }, 'OFF_MAP');
+    play(w, { type: 'withdraw', player: 'bob', destinations: { A1: { q: 1, r: 0 } } });
   });
 
   test('a retreat may not end on the enemy base on game-turn 1 (D-022)', () => {

@@ -1,9 +1,11 @@
 // Map: axial hex geometry and the star/warpline map format.
-// Rules: docs/rules/classic.md §2, §6. Rulings: D-006, D-019 in docs/decisions.md.
+// Rules: docs/rules/classic.md §2, §6. Rulings: D-006, D-019, D-040 in docs/decisions.md.
 //
-// The engine takes the map as data: { stars: [{ id, name, q, r, baseOwner }], warplines: [[idA, idB]] }.
+// The engine takes the map as data: { stars: [{ id, name, q, r, baseOwner }], warplines: [[idA, idB]], bounds? }.
 // Positions are axial { q, r }. Display IDs like "1720" are for humans and never reach the engine.
 // A warpline is a pair of star ids; the hexes it crosses are ordinary space hexes (D-006).
+// bounds (D-040): { x: [min, max], r: [min, max] }, the map edge. A hex is on the map when its row r and its
+// column x = q + r/2 both lie inside, edges included. A map without bounds has no edge.
 
 // The six neighbours of a hex, as axial offsets.
 export const DIRECTIONS = [
@@ -30,7 +32,7 @@ export function distance(a, b) {
 
 export const isAdjacent = (a, b) => distance(a, b) === 1;
 
-const MAP_KEYS = ['stars', 'warplines'];
+const MAP_KEYS = ['stars', 'warplines', 'bounds'];
 const STAR_KEYS = ['id', 'name', 'q', 'r', 'baseOwner'];
 const nonEmpty = (v) => typeof v === 'string' && v.length > 0;
 
@@ -45,6 +47,12 @@ export function validateMap(data) {
   for (const key of Object.keys(data)) {
     if (!MAP_KEYS.includes(key)) error('UNKNOWN_FIELD', `Unknown map field: ${key}`);
   }
+  const bounds = data.bounds;
+  const range = (v) => Array.isArray(v) && v.length === 2 && v.every(Number.isInteger) && v[0] <= v[1];
+  const boundsOk = bounds === undefined
+    || (bounds != null && typeof bounds === 'object' && !Array.isArray(bounds)
+      && Object.keys(bounds).every((k) => k === 'x' || k === 'r') && range(bounds.x) && range(bounds.r));
+  if (!boundsOk) error('BAD_BOUNDS', 'bounds is { x: [min, max], r: [min, max] } with integers, min <= max (D-040)');
   const warplines = data.warplines ?? [];
   if (!Array.isArray(warplines)) error('BAD_MAP', 'warplines must be a list');
 
@@ -64,6 +72,9 @@ export function validateMap(data) {
     if (nonEmpty(star?.id)) {
       if (ids.has(star.id)) error('DUPLICATE_STAR', `Duplicate star id: ${star.id}`);
       ids.add(star.id);
+    }
+    if (isHex(star) && bounds !== undefined && boundsOk && !onMap({ bounds }, star)) {
+      error('STAR_OFF_MAP', `Star ${label}: hex ${star.q},${star.r} is outside the map bounds`);
     }
     if (isHex(star)) {
       const key = `${star.q},${star.r}`;
@@ -97,7 +108,16 @@ export function loadMap(data) {
   return {
     stars: data.stars.map((s) => ({ id: s.id, name: s.name, q: s.q, r: s.r, baseOwner: s.baseOwner ?? null })),
     warplines: (data.warplines ?? []).map(([a, b]) => [a, b]),
+    bounds: data.bounds ? { x: [...data.bounds.x], r: [...data.bounds.r] } : null,
   };
+}
+
+// D-040: true if the hex is inside the map's edge (always, for a map without bounds).
+export function onMap(map, hex) {
+  if (!map.bounds) return true;
+  const x = hex.q + hex.r / 2;
+  const { x: [x0, x1], r: [r0, r1] } = map.bounds;
+  return hex.r >= r0 && hex.r <= r1 && x >= x0 && x <= x1;
 }
 
 export const starAt = (map, hex) => map.stars.find((s) => sameHex(s, hex)) ?? null;

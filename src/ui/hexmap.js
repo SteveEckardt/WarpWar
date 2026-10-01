@@ -29,24 +29,42 @@ export function shipsAt(state, hex) {
     .sort(([a, x], [b, y]) => x.owner.localeCompare(y.owner) || a.localeCompare(b, undefined, { numeric: true }));
 }
 
-// The hexes to draw: every hex whose centre lies in the stars' bounding box plus MARGIN hexes all round.
-function frame(stars) {
-  const centres = stars.map(centre);
-  const minX = Math.min(...centres.map((c) => c.x)) - SIZE * SQRT3 * MARGIN;
-  const maxX = Math.max(...centres.map((c) => c.x)) + SIZE * SQRT3 * MARGIN;
-  const minY = Math.min(...centres.map((c) => c.y)) - SIZE * 1.5 * MARGIN;
-  const maxY = Math.max(...centres.map((c) => c.y)) + SIZE * 1.5 * MARGIN;
+// The hexes to draw, D-040: the map's own bounds (column x = q + r/2, row r). A map without bounds is drawn to the same rule the
+// original map's bounds were set by: the stars plus MARGIN hexes all round.
+function frame(map) {
+  const { stars } = map;
+  const xs = stars.map((s) => s.q + s.r / 2);
   const rs = stars.map((s) => s.r);
-  const qs = stars.map((s) => s.q);
+  const bounds = map.bounds ?? {
+    x: [Math.min(...xs) - MARGIN, Math.max(...xs) + MARGIN],
+    r: [Math.min(...rs) - MARGIN, Math.max(...rs) + MARGIN],
+  };
   const hexes = [];
-  for (let r = Math.min(...rs) - MARGIN - 1; r <= Math.max(...rs) + MARGIN + 1; r++) {
-    const spread = 2 * MARGIN + Math.ceil(Math.abs(r) / 2) + 8;
-    for (let q = Math.min(...qs) - spread; q <= Math.max(...qs) + spread; q++) {
-      const c = centre({ q, r });
-      if (c.x >= minX && c.x <= maxX && c.y >= minY && c.y <= maxY) hexes.push(c);
-    }
+  for (let r = bounds.r[0]; r <= bounds.r[1]; r++) {
+    for (let q = Math.ceil(bounds.x[0] - r / 2); q <= Math.floor(bounds.x[1] - r / 2); q++) hexes.push({ q, r });
   }
-  return { hexes, minX, maxX, minY, maxY };
+  return {
+    hexes,
+    minX: SIZE * SQRT3 * bounds.x[0],
+    maxX: SIZE * SQRT3 * bounds.x[1],
+    minY: SIZE * 1.5 * bounds.r[0],
+    maxY: SIZE * 1.5 * bounds.r[1],
+  };
+}
+
+// While planning a move: the path so far as a line, and each legal next step as a clickable target.
+// plan: { path: [hex], targets: [{ step, to }] } as from planInfo in movement.js.
+function planOverlay(plan, at, map) {
+  const out = [];
+  const points = plan.path.map((h) => at(centre(h))).map((p) => `${f(p.x)},${f(p.y)}`).join(' ');
+  out.push(`<polyline class="plan-path" points="${points}" fill="none" stroke="#facc15" stroke-width="3" stroke-dasharray="6 4" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>`);
+  const start = at(centre(plan.path[0]));
+  out.push(`<circle cx="${f(start.x)}" cy="${f(start.y)}" r="5" fill="#facc15" pointer-events="none"/>`);
+  for (const [i, t] of plan.targets.entries()) {
+    const label = t.step.type === 'jump' ? `Jump to ${map.stars.find((s) => s.id === t.step.to)?.name ?? t.step.to}` : `Move to ${t.to.q}, ${t.to.r}`;
+    out.push(`<polygon class="target ${t.step.type}" data-target="${i}" points="${hexPoints(at(centre(t.to)))}" tabindex="0" role="button" aria-label="${esc(label)}"><title>${esc(label)} (1 MP)</title></polygon>`);
+  }
+  return out;
 }
 
 // One counter per side in a hex, right of the hex centre: A above, B below. Shows the number of ships
@@ -73,11 +91,12 @@ function markers(state, at) {
   return out;
 }
 
-// options.selected: the id of a star to highlight.
-export function renderMap(state, { selected = null } = {}) {
+// options.selected: the id of a star to highlight. selectedHex: a space hex { q, r } to highlight.
+// plan: a move being planned (see planOverlay).
+export function renderMap(state, { selected = null, selectedHex = null, plan = null } = {}) {
   const { stars, warplines } = state.map;
   const byId = Object.fromEntries(stars.map((s) => [s.id, s]));
-  const { hexes, minX, maxX, minY, maxY } = frame(stars);
+  const { hexes, minX, maxX, minY, maxY } = frame(state.map);
   const width = Math.ceil(maxX - minX + 2 * SIZE);
   const height = Math.ceil(maxY - minY + 2 * SIZE);
   const at = (c) => ({ x: c.x + SIZE - minX, y: c.y + SIZE - minY });
@@ -87,8 +106,9 @@ export function renderMap(state, { selected = null } = {}) {
   out.push(`<rect width="${width}" height="${height}" fill="#0f172a"/>`);
 
   out.push(`<g fill="#162238" stroke="#2a3a57" stroke-width="1">`);
-  for (const c of hexes) out.push(`<polygon points="${hexPoints(at(c))}"/>`);
+  for (const h of hexes) out.push(`<polygon class="hex" data-hex="${h.q},${h.r}" points="${hexPoints(at(centre(h)))}"/>`);
   out.push(`</g>`);
+  if (selectedHex) out.push(`<polygon points="${hexPoints(at(centre(selectedHex)))}" fill="none" stroke="#facc15" stroke-width="3" pointer-events="none"/>`);
 
   out.push(`<g stroke="#e2e8f0" stroke-width="2" stroke-linecap="round" opacity="0.85">`);
   for (const [a, b] of warplines) {
@@ -116,6 +136,7 @@ export function renderMap(state, { selected = null } = {}) {
   }
 
   out.push(...markers(state, at));
+  if (plan) out.push(...planOverlay(plan, at, state.map));
   out.push(`</svg>`);
   return out.join('\n');
 }
