@@ -1,6 +1,6 @@
 # Roadmap
 
-Current phase: 6a
+Current phase: 6b
 
 0. Rules extraction: PDF to docs/rules/classic.md, ambiguities logged
 1. Ship building: attributes, BP costs, validation
@@ -15,5 +15,6 @@ Current phase: 6a
 5b. Systemship carrying: §7.3 pickup and drop, D-017, D-020, D-021, D-027, D-028
 6a. Playable map design: an original map (D-019), proposed in docs/maps/classic-original.md; no code
 6b. Turn sequence and Learning scenario (uses the map from 6a, saved to data/maps/ once approved)
+6c. Basic and Advanced scenarios: BP income, repair, resupply, tech advancement
 7. UI
 8. Fan Extended rules as optional modules

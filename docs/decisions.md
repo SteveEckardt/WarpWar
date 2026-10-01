@@ -366,3 +366,33 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
 - **Ruling (2026-09-30):** Amends D-032. A rack in use for a pickup counts as occupied, except when it is the
   Warpship's last hittable attribute. Then the pickup fails, the rack can take hits, and if the Warpship is
   destroyed the Systemship remains on the hex (§7.3).
+
+## F. Turn sequence
+
+### D-036 — Draw check before any ships are built (clarifies D-009)
+- **Status:** RESOLVED
+- **Where:** §3 event 1; §4.1; D-009
+- **Text:** "This occurs when neither player has any effective ships left." / D-009: "A draw occurs when neither
+  player has an effective ship, checked at the start of each player-turn."
+- **Question:** At the start of the first player-turn no ships exist yet, so D-009 read literally ends the game
+  at once in a draw. When does the draw check begin?
+- **Ruling (2026-09-30):** Clarifies D-009. The draw check applies only after both players have completed their
+  first Build event.
+
+### D-037 — Victory and draw at the same turn start
+- **Status:** RESOLVED
+- **Where:** §3 event 1; D-009; D-010
+- **Text:** "If this brings your point total to the level necessary for the victory conditions … then you have
+  won and the game is over. In the Learning and Basic scenarios, it is possible for a game to end in a draw."
+- **Question:** If at the start of a player-turn that player has enough victory points and neither player has
+  an effective ship (for example, an occupying ship with PD 0), is it a win or a draw?
+- **Ruling (2026-09-30):** Victory is checked first and wins.
+
+### D-038 — Which ships are effective (clarifies D-009)
+- **Status:** RESOLVED
+- **Where:** §3 event 1; §4.1; §7.1; D-009; D-020; D-030
+- **Text:** D-009: "A ship is 'effective' if it can fire a weapon or move."
+- **Question:** Firing needs power from PD, and carried Systemships cannot fire until dropped (D-020). Precisely
+  which ships count, and do carried Systemships count?
+- **Ruling (2026-09-30):** Clarifies D-009. A ship is effective if it has PD of 1 or more and is either a
+  Warpship or carries a weapon it can power. This applies to carried Systemships too.

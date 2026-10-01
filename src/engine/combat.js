@@ -1,6 +1,6 @@
 // Combat round at one star hex: order validation, round resolution, end conditions.
 // Rules: docs/rules/classic.md §7, §7.1, §7.2, §7.3. Rulings: docs/decisions.md.
-// Not built yet: retreat destination hexes (see docs/roadmap.md).
+// Retreat and forced-withdrawal destination hexes are chosen in game.js.
 
 import { lookupCRT, TACTICS } from './crt.js';
 import { hitDamage, roundDamage, applyHits, isDestroyed, MISSILES_PER_HIT } from './damage.js';
@@ -167,16 +167,8 @@ function endReason(hows) {
   return 'all destroyed or escaped';
 }
 
-// Resolves one round (§7 steps 2-5). `hitAllocations` is the owners' choice, { id: { PD, B, ... } }:
-// for each ship it must total min(effective hits, hits the ship can still take). The engine
-// does not choose. A Warpship's allocation may also hit its carried Systemships (D-021):
-// { PD: 1, carried: { S20: { PD: 2 } } }. Occupied racks cannot take hits (D-021, D-032), except the
-// rack in use for a pickup when it is the Warpship's last hittable attribute (D-035).
-// Returns { hex, shots, damage, destroyed, escaped, end }: `destroyed` lists ids (carried ones too),
-// `escaped` maps id to the ship's damaged record, Systemships aboard included (the caller places it;
-// no destination is chosen here).
-// `end` is null while both sides still have ships, otherwise { reason } (plus `owners` when a side is eliminated).
-export function resolveRound(hex, orders, hitAllocations = {}) {
+// Validates the orders and reads every weapon off the CRT. Returns { ids, afterFiring, shots, damage }.
+function prepareRound(hex, orders) {
   const errors = validateOrders(hex, orders);
   if (errors.length > 0) {
     throw new Error(errors.map((e) => `${e.ship}: ${e.code}: ${e.message}`).join('; '));
@@ -211,7 +203,72 @@ export function resolveRound(hex, orders, hitAllocations = {}) {
     const hits = shots.filter((s) => s.to === id).map((s) => s.damage);
     damage[id] = roundDamage(hits, power(orders[id], 'S'), hex.ships[id].level);
   }
+  return { ids, afterFiring, shots, damage };
+}
 
+// How many of its effective hits one ship must take this round, and where they can go.
+function hitLimits(hex, orders, afterFiring, id, effective) {
+  const base = hex.ships[id];
+  const dropId = orders[id].drop;
+  // D-020, D-021: only Systemships carried into the round, and not dropped in it, can take its hits.
+  const cargo = Object.fromEntries(Object.entries(base.carrying ?? {}).filter(([cid]) => cid !== dropId));
+  // D-032: a rack in use for a pickup is occupied. D-033: a rack freed by a drop is empty.
+  const pickRack = orders[id].pickup != null ? 1 : 0;
+  const racks = base.SR - Object.keys(cargo).length - pickRack;
+  // Most the ship can take apart from the pickup rack: its hittable attributes, its carried Systemships,
+  // and the racks they free.
+  const capacity = Object.values(cargo).reduce((sum, rec) => sum + hitCapacity(rec) + 1, hitCapacity(afterFiring[id], racks));
+  return { cargo, racks, capacity, owed: Math.min(effective, capacity + pickRack) };
+}
+
+// Checks one ship's hit allocation and applies it. Returns { ship, cargoAfter }. Throws RangeError.
+function takeHits(hex, orders, afterFiring, id, effective, hitAllocation = {}) {
+  const { cargo, racks, capacity, owed } = hitLimits(hex, orders, afterFiring, id, effective);
+  const { carried: cargoHits = {}, ...allocation } = hitAllocation;
+  for (const cid of Object.keys(cargoHits)) {
+    if (!(cid in cargo)) throw new RangeError(`${id} does not carry ${cid}`);
+  }
+  // D-034: a carried Systemship destroyed by this round's hits frees its rack, which can then take hits.
+  const cargoAfter = Object.fromEntries(Object.entries(cargo).map(([cid, rec]) => [cid, applyHits(rec, cargoHits[cid] ?? {})]));
+  const freed = Object.values(cargoAfter).filter(isDestroyed).length;
+  // D-035: the pickup rack takes a hit only when it is the last hittable thing left. The pickup then fails.
+  const rackHit = owed > capacity ? 1 : 0;
+  if ((allocation.SR ?? 0) > racks + freed + rackHit) {
+    throw new RangeError(`${id} has ${racks + freed + rackHit} racks that can take hits; occupied racks cannot (D-021, D-032, D-034)`);
+  }
+  const assigned = sumHits(allocation) + Object.values(cargoHits).reduce((sum, h) => sum + sumHits(h), 0);
+  if (assigned !== owed) {
+    throw new RangeError(`${id} takes ${owed} hits but ${assigned} were assigned`);
+  }
+  return { ship: applyHits(afterFiring[id], allocation), cargoAfter };
+}
+
+// A round's shots and damage, and the hits each ship's owner must allocate (§7 step 2, §7.2.2), before any
+// allocation is made. Returns { shots, damage, owed: { id: hits } }. Throws if the orders are illegal.
+export function hitsOwed(hex, orders) {
+  const { ids, afterFiring, shots, damage } = prepareRound(hex, orders);
+  const owed = Object.fromEntries(ids.map((id) => [id, hitLimits(hex, orders, afterFiring, id, damage[id].effective).owed]));
+  return { shots, damage, owed };
+}
+
+// Checks one ship's hit allocation on its own, exactly as resolveRound will. Throws RangeError.
+export function checkHitAllocation(hex, orders, id, allocation) {
+  if (!(id in hex.ships)) throw new RangeError(`Hit allocation for unknown ship: ${id}`);
+  const { afterFiring, damage } = prepareRound(hex, orders);
+  takeHits(hex, orders, afterFiring, id, damage[id].effective, allocation);
+}
+
+// Resolves one round (§7 steps 2-5). `hitAllocations` is the owners' choice, { id: { PD, B, ... } }:
+// for each ship it must total min(effective hits, hits the ship can still take). The engine
+// does not choose. A Warpship's allocation may also hit its carried Systemships (D-021):
+// { PD: 1, carried: { S20: { PD: 2 } } }. Occupied racks cannot take hits (D-021, D-032), except the
+// rack in use for a pickup when it is the Warpship's last hittable attribute (D-035).
+// Returns { hex, shots, damage, destroyed, escaped, end }: `destroyed` lists ids (carried ones too),
+// `escaped` maps id to the ship's damaged record, Systemships aboard included (the caller places it;
+// no destination is chosen here).
+// `end` is null while both sides still have ships, otherwise { reason } (plus `owners` when a side is eliminated).
+export function resolveRound(hex, orders, hitAllocations = {}) {
+  const { ids, afterFiring, shots, damage } = prepareRound(hex, orders);
   for (const id of Object.keys(hitAllocations)) {
     if (!(id in hex.ships)) throw new RangeError(`Hit allocation for unknown ship: ${id}`);
   }
@@ -223,34 +280,7 @@ export function resolveRound(hex, orders, hitAllocations = {}) {
     const base = hex.ships[id];
     const owner = base.owner;
     const dropId = orders[id].drop;
-    // D-020, D-021: only Systemships carried into the round, and not dropped in it, can take its hits.
-    const cargo = Object.fromEntries(Object.entries(base.carrying ?? {}).filter(([cid]) => cid !== dropId));
-    // D-032: a rack in use for a pickup is occupied. D-033: a rack freed by a drop is empty.
-    const pickRack = orders[id].pickup != null ? 1 : 0;
-    const racks = base.SR - Object.keys(cargo).length - pickRack;
-
-    const { carried: cargoHits = {}, ...allocation } = hitAllocations[id] ?? {};
-    for (const cid of Object.keys(cargoHits)) {
-      if (!(cid in cargo)) throw new RangeError(`${id} does not carry ${cid}`);
-    }
-    // D-034: a carried Systemship destroyed by this round's hits frees its rack, which can then take hits.
-    const cargoAfter = Object.fromEntries(Object.entries(cargo).map(([cid, rec]) => [cid, applyHits(rec, cargoHits[cid] ?? {})]));
-    const freed = Object.values(cargoAfter).filter(isDestroyed).length;
-    // Most the ship can take apart from the pickup rack: its hittable attributes, its carried Systemships,
-    // and the racks they free.
-    const capacity = Object.values(cargo).reduce((sum, rec) => sum + hitCapacity(rec) + 1, hitCapacity(afterFiring[id], racks));
-    const owed = Math.min(damage[id].effective, capacity + pickRack);
-    // D-035: the pickup rack takes a hit only when it is the last hittable thing left. The pickup then fails.
-    const rackHit = owed > capacity ? 1 : 0;
-    if ((allocation.SR ?? 0) > racks + freed + rackHit) {
-      throw new RangeError(`${id} has ${racks + freed + rackHit} racks that can take hits; occupied racks cannot (D-021, D-032, D-034)`);
-    }
-    const assigned = sumHits(allocation) + Object.values(cargoHits).reduce((sum, h) => sum + sumHits(h), 0);
-    if (assigned !== owed) {
-      throw new RangeError(`${id} takes ${owed} hits but ${assigned} were assigned`);
-    }
-
-    const ship = applyHits(afterFiring[id], allocation);
+    const { ship, cargoAfter } = takeHits(hex, orders, afterFiring, id, damage[id].effective, hitAllocations[id]);
     const kept = {};
     for (const [cid, hit] of Object.entries(cargoAfter)) {
       if (isDestroyed(hit)) {
