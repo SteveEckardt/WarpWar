@@ -188,6 +188,14 @@ function readOrders(form) {
       drive: count(row.querySelector('input[name="drive"]')),
     }));
     if (missiles.length > 0) order.missiles = missiles;
+    // Fan §10.2.3, D-048: one Cannon target, a burst per Cannon fired.
+    const cannonTarget = set.querySelector('select[name="cannonTarget"]');
+    if (cannonTarget) {
+      const shells = [...set.querySelectorAll('select[name="burst"]')].map((s) => Number(s.value)).filter((n) => n > 0);
+      order.C = shells.length;
+      order.shells = shells;
+      order.cannonTarget = cannonTarget.value || null;
+    }
     // §7.3: 'pickup:S01' or 'drop:S01'.
     const [kind, sid] = (set.querySelector('select[name="carry"]')?.value ?? '').split(':');
     if (kind === 'pickup' || kind === 'drop') order[kind] = sid;
@@ -221,8 +229,14 @@ function readAllocations(form) {
 // Orders as the engine takes them: no empty Beam target, no empty Missile list.
 function cleanOrders(orders) {
   return Object.fromEntries(Object.entries(orders).map(([id, o]) => {
-    const { beamTarget, missiles, ...rest } = o;
-    return [id, { ...rest, ...(beamTarget ? { beamTarget } : {}), ...(missiles?.length ? { missiles } : {}) }];
+    const { beamTarget, missiles, cannonTarget, shells, C, ...rest } = o;
+    const firing = shells?.length > 0;
+    return [id, {
+      ...rest,
+      ...(beamTarget ? { beamTarget } : {}),
+      ...(missiles?.length ? { missiles } : {}),
+      ...(firing || cannonTarget ? { C: C ?? 0, shells: shells ?? [], ...(cannonTarget ? { cannonTarget } : {}) } : {}),
+    }];
   }));
 }
 
@@ -460,7 +474,7 @@ function readRepairs(form) {
     for (const input of set.querySelectorAll('input[type="number"]')) {
       const n = count(input);
       if (n === 0) continue;
-      if (input.name === 'M') ui.resupply[id] = n;
+      if (input.name === 'M' || input.name === 'SH') ui.resupply[id] = { ...(ui.resupply[id] ?? {}), [input.name]: n };
       else ui.repairs[id] = { ...(ui.repairs[id] ?? {}), [input.name]: n };
     }
   }

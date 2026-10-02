@@ -31,7 +31,7 @@ const withoutOwner = ({ owner, ...rec }) => rec;
 
 describe('switching the module on (D-045)', () => {
   test('a game lists its modules; none by default; unknown ones are refused', () => {
-    assert.deepEqual(MODULES, ['armor']);
+    assert.ok(MODULES.includes('armor'));
     const plain = createGame({ map: mapData, scenario: 'learning', players: ['ann', 'bob'] });
     assert.deepEqual(plain.modules, []);
     const armored = createGame({ map: mapData, scenario: 'basic', players: ['ann', 'bob'], modules: ['armor'] });

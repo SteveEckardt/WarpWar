@@ -7,22 +7,29 @@
 import { SIDES, applyAction, previewDestination } from '../engine/game.js';
 import { validateOrders, hitsOwed, checkHitAllocation, QUIET_ROUNDS_TO_WITHDRAW } from '../engine/combat.js';
 import { ATTRIBUTES, attributesFor } from '../engine/ships.js';
-import { MISSILES_PER_HIT } from '../engine/damage.js';
+import { MISSILES_PER_HIT, hitsCapacity } from '../engine/damage.js';
 import { neighbors, onMap, starById } from '../engine/map.js';
 import { freeRacks } from '../engine/carrying.js';
 import { esc } from './hexmap.js';
 import { displayId, playerOf, plainIds } from './view.js';
 
 const TACTIC_WORD = { attack: 'ATTACK', dodge: 'DODGE', retreat: 'RETREAT' };
+const shellWords = (n) => `${n} Shell${n === 1 ? '' : 's'}`;
+const MAX_SHELLS_PER_CANNON = 3; // fan §10.2.3; the engine checks it
 const TACTIC_NAME = { attack: 'Attack', dodge: 'Dodge', retreat: 'Retreat' };
 
 // An order as the rulebook writes it (§7.1.2, §7.1.3): one line for the ship, one per Missile.
 export function orderText(id, ship, order) {
   const target = order.beamTarget != null ? displayId(order.beamTarget) : null;
   const verb = order.tactic === 'attack' && target ? `ATTACKS ${target}` : TACTIC_WORD[order.tactic] + (target ? `, Beam at ${target}` : '');
-  const power = ['D', 'B', 'S', 'T'].map((k) => `${k}=${order[k] ?? 0}`).join(', ');
+  const keys = (order.C ?? 0) > 0 ? ['D', 'B', 'S', 'T', 'C'] : ['D', 'B', 'S', 'T'];
+  const power = keys.map((k) => `${k}=${order[k] ?? 0}`).join(', ');
   const lines = [`${displayId(id)} (Level ${ship.level ?? 0}) ${verb}: ${power}.`];
   for (const m of order.missiles ?? []) lines.push(`M at ${displayId(m.target)}: D=${m.drive}.`);
+  // Fan §10.2.3, D-048: one target for all Cannons, a burst per Cannon.
+  if (order.cannonTarget != null && (order.shells ?? []).length > 0) {
+    lines.push(`Cannons at ${displayId(order.cannonTarget)}: ${order.shells.map(shellWords).join(', ')}.`);
+  }
   if (order.pickup != null) lines.push(`Picks up ${displayId(order.pickup)}.`);
   if (order.drop != null) lines.push(`Drops ${displayId(order.drop)}.`);
   return lines;
@@ -73,7 +80,8 @@ const num = (name, value, max, label) =>
 function orderForm(state, id, ship, order, enemies) {
   const out = [];
   out.push(`<fieldset class="order" data-ship="${esc(id)}">`);
-  out.push(`<legend>${esc(displayId(id))} · ${ship.WG ? 'Warpship' : 'Systemship'} · PD ${ship.PD}, B ${ship.B}, S ${ship.S}, T ${ship.T}, M ${ship.M}</legend>`);
+  const cannons = (ship.C ?? 0) > 0 ? `, C ${ship.C}, SH ${ship.SH ?? 0}` : '';
+  out.push(`<legend>${esc(displayId(id))} · ${ship.WG ? 'Warpship' : 'Systemship'} · PD ${ship.PD}, B ${ship.B}, S ${ship.S}, T ${ship.T}, M ${ship.M}${cannons}</legend>`);
   out.push(`<div class="tactics">`);
   for (const t of ['attack', 'dodge', 'retreat']) {
     const off = t === 'retreat' && !ship.WG;
@@ -98,6 +106,17 @@ function orderForm(state, id, ship, order, enemies) {
       out.push(`<label class="target">Systemship <select name="carry">${opts}</select></label>`);
     }
   }
+  if ((ship.C ?? 0) > 0 && (ship.SH ?? 0) > 0) {
+    // Fan §10.2.3, D-048: one target; each Cannon fired costs 1 PD and fires a burst of 1 to 3 Shells.
+    out.push(`<div class="cannons">`);
+    out.push(`<label class="target">Cannon target <select name="cannonTarget"><option value="">None</option>${options(order.cannonTarget)}</select></label>`);
+    for (let i = 0; i < ship.C; i++) {
+      const now = order.shells?.[i] ?? 0;
+      const opts = Array.from({ length: MAX_SHELLS_PER_CANNON + 1 }, (_, n) => `<option value="${n}"${n === now && n > 0 ? ' selected' : ''}>${n === 0 ? 'Not fired' : shellWords(n)}</option>`).join('');
+      out.push(`<label>Cannon ${i + 1} <select name="burst">${opts}</select></label>`);
+    }
+    out.push(`</div>`);
+  }
   if (ship.T > 0 && ship.M > 0) {
     out.push(`<div class="missiles">`);
     for (const [i, m] of (order.missiles ?? []).entries()) {
@@ -117,7 +136,7 @@ export function renderOrderCheck(state, side, orders) {
   out.push(`<ul class="power-used">`);
   for (const [id, ship] of ownShips(state, side)) {
     const o = orders[id] ?? {};
-    const used = ['D', 'B', 'S', 'T'].reduce((sum, k) => sum + (Number(o[k]) || 0), 0);
+    const used = ['D', 'B', 'S', 'T', 'C'].reduce((sum, k) => sum + (Number(o[k]) || 0), 0);
     out.push(`<li>${esc(displayId(id))}: power ${used} of ${ship.PD}</li>`);
   }
   out.push(`</ul>`);
@@ -165,7 +184,7 @@ function reportBody(state, ships, orders, shots, damage) {
       const from = orders[s.from];
       const to = orders[s.to];
       let drive = from.D ?? 0;
-      let weapon = 'Beam';
+      let weapon = s.weapon === 'cannon' ? `Cannon (${shellWords(s.shells)})` : 'Beam';
       let tactic = from.tactic;
       if (s.weapon === 'missile') {
         const i = missileIndex[s.from] ?? 0;
@@ -241,7 +260,10 @@ export function hitsToTake(state, side) {
     .filter(([id, n]) => n > 0 && c.hex.ships[id].owner === side)
     .map(([id, owed]) => {
       const fired = (orders[id].missiles ?? []).length;
-      return { id, owed, ship: { ...c.hex.ships[id], M: c.hex.ships[id].M - fired } };
+      const ship = { ...c.hex.ships[id], M: c.hex.ships[id].M - fired };
+      // D-050: Shells fired leave the stock before hits are taken.
+      if (ship.SH != null) ship.SH -= (orders[id].shells ?? []).reduce((a, b) => a + b, 0);
+      return { id, owed, ship };
     });
 }
 
@@ -279,7 +301,8 @@ export function renderHitCheck(state, side, allocations) {
 export function renderHits(state, player, allocations) {
   const side = state.sides[player];
   const out = [header(state)];
-  out.push(`<p>${esc(player)}, choose where your ships take their hits (§7.2.2). One hit removes one point, or 3 Missiles. Your opponent does not see this.</p>`);
+  const ammo = state.modules?.includes('cannons') ? ', 3 Missiles or 6 Shells' : ', or 3 Missiles';
+  out.push(`<p>${esc(player)}, choose where your ships take their hits (§7.2.2). One hit removes one point${ammo}. Your opponent does not see this.</p>`);
   // Ships whose Armor took every hit have nothing to place, but their owner still sees what Armor took.
   const armor = armorShares(state, side);
   const placing = new Set(hitsToTake(state, side).map((h) => h.id));
@@ -291,10 +314,11 @@ export function renderHits(state, player, allocations) {
     if (armor[id]) out.push(`<p class="hint">${esc(displayId(id))}: Armor takes <strong>${armor[id]}</strong> first (D-042).</p>`);
     const a = allocations[id] ?? {};
     out.push(`<fieldset class="hit" data-ship="${esc(id)}"><legend><strong>${esc(displayId(id))}</strong> must take <strong>${owed} hits</strong></legend><div class="powers">`);
-    for (const attr of ATTRIBUTES) {
-      const can = attr === 'M' ? Math.ceil(ship.M / MISSILES_PER_HIT) : ship[attr];
+    // Armor is not placed by hand (D-042).
+    for (const attr of attributesFor(state.modules ?? []).filter((a) => a !== 'A')) {
+      const can = hitsCapacity(ship, attr);
       if (can === 0) continue;
-      const label = attr === 'M' ? `M (${ship.M})` : `${attr} (${ship[attr]})`;
+      const label = attr === 'M' ? `M (${ship.M})` : attr === 'SH' ? `SH (${ship.SH}), 6 a hit` : `${attr} (${ship[attr]})`;
       out.push(num(attr, a[attr], can, label));
     }
     out.push(`</div>`);
@@ -304,7 +328,7 @@ export function renderHits(state, player, allocations) {
       out.push(`<fieldset class="carried" data-carried="${esc(cid)}"><legend>${esc(displayId(cid))}, carried</legend><div class="powers">`);
       // D-046: a carried Systemship's Armor takes its hits first.
       for (const attr of attributesFor(state.modules ?? [])) {
-        const can = attr === 'M' ? Math.ceil(rec.M / MISSILES_PER_HIT) : (rec[attr] ?? 0);
+        const can = hitsCapacity(rec, attr);
         if (can === 0) continue;
         out.push(num(attr, ca[attr], can, attr === 'M' ? `M (${rec.M})` : `${attr} (${rec[attr]})`));
       }

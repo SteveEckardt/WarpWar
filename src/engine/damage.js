@@ -2,10 +2,16 @@
 // Rules: docs/rules/classic.md §5.2, §7.2.1, §7.2.2. Rulings: docs/decisions.md.
 // Hits on carried Systemships (D-021) are routed by combat.js, which calls applyHits on each carried record.
 
-import { ATTRIBUTES } from './ships.js';
+import { ATTRIBUTES, OPTIONAL_ATTRIBUTES, SHELLS_PER_BP } from './ships.js';
 
 export const MISSILE_BASE_HITS = 2;
 export const MISSILES_PER_HIT = 3;
+// D-050: a hit on Shells takes out 6, or all of 1 to 5 left.
+export const SHELLS_PER_HIT = SHELLS_PER_BP;
+
+// Hits an attribute can take: one per point, Missiles and Shells by their groups.
+export const hitsCapacity = (ship, attr) =>
+  attr === 'M' ? Math.ceil(ship.M / MISSILES_PER_HIT) : attr === 'SH' ? Math.ceil((ship.SH ?? 0) / SHELLS_PER_HIT) : (ship[attr] ?? 0);
 
 function assertCount(v, label, min = 0) {
   if (!Number.isInteger(v) || v < min) {
@@ -14,8 +20,10 @@ function assertCount(v, label, min = 0) {
 }
 
 // Hits one weapon inflicts for a CRT cell (§5.2, §7.2.1).
-// weapon: { type: 'beam', power } or { type: 'missile' }; level is the firing ship's tech level.
-// Beam: power + level + bonus. Missile: 2 + level + bonus. A miss does 0.
+// weapon: { type: 'beam', power }, { type: 'missile' } or { type: 'shells', count } (one Cannon's burst);
+// level is the firing ship's tech level.
+// Beam: power + level + bonus. Missile: 2 + level + bonus. Shells: 1 per Shell + level + bonus, once per burst
+// (fan §10.2.4, D-048). A miss does 0.
 // Only hit and miss cells are accepted; "escapes" is D-025 (OPEN).
 export function hitDamage(weapon, level, cell) {
   assertCount(level, 'Tech level');
@@ -31,6 +39,9 @@ export function hitDamage(weapon, level, cell) {
     base = weapon.power;
   } else if (weapon?.type === 'missile') {
     base = MISSILE_BASE_HITS;
+  } else if (weapon?.type === 'shells') {
+    assertCount(weapon.count, 'Shells in a burst', 1);
+    base = weapon.count;
   } else {
     throw new RangeError(`Unknown weapon: ${weapon?.type}`);
   }
@@ -57,7 +68,7 @@ export function roundDamage(hits, screenPower, level) {
 
 // Destroyed when every attribute but the Warp Generator is zero; Armor counts (D-047).
 export function isDestroyed(ship) {
-  return ATTRIBUTES.every((attr) => ship[attr] === 0) && (ship.A ?? 0) === 0;
+  return ATTRIBUTES.every((attr) => ship[attr] === 0) && OPTIONAL_ATTRIBUTES.every((attr) => (ship[attr] ?? 0) === 0);
 }
 
 // Applies the owner's chosen allocation of effective hits, { PD, B, S, T, M, SR, A }: hits per attribute
@@ -69,15 +80,17 @@ export function isDestroyed(ship) {
 export function applyHits(ship, allocation) {
   const next = { ...ship, built: { ...ship.built } };
   for (const [attr, hits] of Object.entries(allocation)) {
-    if (!ATTRIBUTES.includes(attr) && attr !== 'A') {
+    if (!ATTRIBUTES.includes(attr) && !OPTIONAL_ATTRIBUTES.includes(attr)) {
       throw new RangeError(`Cannot assign hits to: ${attr}`);
     }
     assertCount(hits, `Hits on ${attr}`);
-    const capacity = attr === 'M' ? Math.ceil(ship.M / MISSILES_PER_HIT) : (ship[attr] ?? 0);
+    const capacity = hitsCapacity(ship, attr);
     if (hits > capacity) {
       throw new RangeError(`${hits} hits on ${attr} exceeds what it can take (${capacity})`);
     }
-    next[attr] = attr === 'M' ? Math.max(0, ship.M - hits * MISSILES_PER_HIT) : ship[attr] - hits;
+    if (attr === 'M') next.M = Math.max(0, ship.M - hits * MISSILES_PER_HIT);
+    else if (attr === 'SH') next.SH = Math.max(0, ship.SH - hits * SHELLS_PER_HIT);
+    else next[attr] = ship[attr] - hits;
   }
   return next;
 }

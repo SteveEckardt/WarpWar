@@ -13,6 +13,7 @@ const SCENARIO_TEXT = {
 // Fan rules a game may be created with (docs/rules/fan-modules.md), off by default.
 const MODULE_TEXT = {
   armor: 'Armor (fan §10.2.2): 1 BP buys 2 + tech level points; Armor takes hits after Screens, on its own.',
+  cannons: 'Cannons and Shells (fan §10.2.3, §10.2.4): 1 PD a Cannon fires 1 to 3 Shells, 1 hit each; 6 Shells a BP.',
 };
 
 // values: { player1, player2, first: 0 | 1, scenario, modules, error }.

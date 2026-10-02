@@ -3,12 +3,14 @@
 // Retreat and forced-withdrawal destination hexes are chosen in game.js.
 
 import { lookupCRT, TACTICS } from './crt.js';
-import { hitDamage, roundDamage, applyHits, isDestroyed, MISSILES_PER_HIT } from './damage.js';
+import { hitDamage, roundDamage, applyHits, isDestroyed, MISSILES_PER_HIT, SHELLS_PER_HIT } from './damage.js';
 import { carriedIds, freeRacks, cargoLost } from './carrying.js';
 
 export const QUIET_ROUNDS_TO_WITHDRAW = 3;
 
-const ORDER_KEYS = ['tactic', 'D', 'B', 'S', 'T', 'beamTarget', 'missiles', 'pickup', 'drop'];
+const ORDER_KEYS = ['tactic', 'D', 'B', 'S', 'T', 'C', 'beamTarget', 'missiles', 'cannonTarget', 'shells', 'pickup', 'drop'];
+// Fan §10.2.3: each Cannon fires 1 to 3 Shells a round.
+const MAX_SHELLS_PER_CANNON = 3;
 const MISS = { result: 'miss', bonus: 0 };
 
 // A contested hex. ships: { id: ship record + owner } (records from createShip). A Warpship record may
@@ -25,6 +27,8 @@ export function createHex(ships) {
 
 const power = (order, key) => order[key] ?? 0;
 const missilesOf = (order) => order.missiles ?? [];
+const shellsOf = (order) => order.shells ?? [];
+const sum = (list) => list.reduce((a, b) => a + b, 0);
 
 // Order for one ship (§7.1): { tactic, D, B, S, T, beamTarget?, missiles?: [{ target, drive }], pickup?, drop? }.
 // pickup / drop name one Systemship (§7.3, D-027).
@@ -41,7 +45,7 @@ export function validateOrder(ship, order) {
   } else if (order.tactic === 'retreat' && !ship.WG) {
     error('SYSTEMSHIP_RETREAT', 'Systemships may not select the Retreat tactic');
   }
-  for (const key of ['D', 'B', 'S', 'T']) {
+  for (const key of ['D', 'B', 'S', 'T', 'C']) {
     const v = power(order, key);
     if (!Number.isInteger(v) || v < 0) error('BAD_VALUE', `${key} must be a non-negative integer`);
   }
@@ -57,9 +61,9 @@ export function validateOrder(ship, order) {
   }
   if (errors.length > 0) return errors;
 
-  const { D, B, S, T } = Object.fromEntries(['D', 'B', 'S', 'T'].map((k) => [k, power(order, k)]));
-  if (D + B + S + T > ship.PD) {
-    error('OVER_PD', `Allocated ${D + B + S + T} power but PD is ${ship.PD}`);
+  const { D, B, S, T, C } = Object.fromEntries(['D', 'B', 'S', 'T', 'C'].map((k) => [k, power(order, k)]));
+  if (D + B + S + T + C > ship.PD) {
+    error('OVER_PD', `Allocated ${D + B + S + T + C} power but PD is ${ship.PD}`);
   }
   if (B > ship.B) error('OVER_BEAM', `Beam powered at ${B} but built to ${ship.B}`);
   if (S > ship.S) error('OVER_SCREEN', `Screen powered at ${S} but built to ${ship.S}`);
@@ -72,8 +76,30 @@ export function validateOrder(ship, order) {
   if (missiles.length > 0 && (B > 0 || S > 0)) {
     error('MISSILES_WITH_BEAM_OR_SCREEN', 'No Beam or Screen power on a round that fires Missiles');
   }
+  validateCannons(ship, order, C, B, S, error);
   if (order.pickup != null || order.drop != null) validateCarryOrder(ship, order, error);
   return errors;
+}
+
+// Fan §10.2.3, §10.2.4, D-048: each powered Cannon (1 PD) fires one burst of 1 to 3 Shells, all at one target;
+// `shells` lists the bursts, one per Cannon. Not with a Beam or Screen; with Missiles, yes.
+function validateCannons(ship, order, C, B, S, error) {
+  const shells = shellsOf(order);
+  const ok = Array.isArray(shells) && shells.length === C
+    && shells.every((n) => Number.isInteger(n) && n >= 1 && n <= MAX_SHELLS_PER_CANNON);
+  if (!ok) {
+    error('BAD_SHELLS', `Give each of the ${C} Cannons powered a burst of 1 to ${MAX_SHELLS_PER_CANNON} Shells`);
+    return;
+  }
+  if (C === 0) {
+    if (order.cannonTarget != null) error('UNPOWERED_CANNONS', 'Cannons must be powered (1 PD each) to fire');
+    return;
+  }
+  if (C > (ship.C ?? 0)) error('OVER_CANNONS', `${C} Cannons powered but ship has ${ship.C ?? 0}`);
+  const fired = shells.reduce((sum, n) => sum + n, 0);
+  if (fired > (ship.SH ?? 0)) error('NO_SHELLS', `${fired} Shells fired from a stock of ${ship.SH ?? 0}`);
+  if (order.cannonTarget == null) error('UNAIMED_CANNONS', 'Powered Cannons need a target');
+  if (B > 0 || S > 0) error('CANNONS_WITH_BEAM_OR_SCREEN', 'No Beam or Screen power on a round that fires Cannons (fan §10.2.3)');
 }
 
 // §7.3: Drive 0, Screen 0, Dodge or Retreat, Beam allowed, no Missiles; one Systemship per Warpship (D-027).
@@ -94,6 +120,9 @@ function validateCarryOrder(ship, order, error) {
   }
   if (missilesOf(order).length > 0) {
     error('CARRY_NO_MISSILES', 'A Warpship picking up or dropping a Systemship may not fire Missiles');
+  }
+  if (power(order, 'C') > 0) {
+    error('CARRY_NO_CANNONS', 'A Warpship picking up or dropping a Systemship may not fire Cannons (fan §5.6)');
   }
   if (order.drop != null && !carriedIds(ship).includes(order.drop)) {
     error('NOT_CARRIED', `${order.drop} is not aboard this Warpship`);
@@ -118,7 +147,7 @@ export function validateOrders(hex, orders) {
     }
     const own = validateOrder(ship, order);
     errors.push(...own.map((e) => ({ ship: id, ...e })));
-    const targets = [order.beamTarget, ...missilesOf(order).map((m) => m?.target)].filter((t) => t != null);
+    const targets = [order.beamTarget, order.cannonTarget, ...missilesOf(order).map((m) => m?.target)].filter((t) => t != null);
     for (const t of targets) {
       if (!(t in hex.ships) || hex.ships[t].owner === ship.owner) {
         errors.push({ ship: id, code: 'BAD_TARGET', message: `${t} is not an enemy ship in this hex` });
@@ -146,7 +175,7 @@ export function validateOrders(hex, orders) {
     if (o && power(o, 'D') > 0) {
       errors.push({ ship: target, code: 'PICKED_UP_DRIVE', message: 'A Systemship being picked up has Drive 0 that round (D-031)' });
     }
-    if (o && (power(o, 'B') > 0 || power(o, 'T') > 0 || o.beamTarget != null || missilesOf(o).length > 0)) {
+    if (o && (power(o, 'B') > 0 || power(o, 'T') > 0 || power(o, 'C') > 0 || o.beamTarget != null || missilesOf(o).length > 0)) {
       errors.push({ ship: target, code: 'PICKED_UP_CANNOT_FIRE', message: 'A Systemship being picked up may not fire any weapon' });
     }
   }
@@ -156,7 +185,8 @@ export function validateOrders(hex, orders) {
 // Hits a ship can still take: one per point, Missiles in groups of 3 (§7.2.2). Only free racks count
 // (D-021), so `racks` is the free SR. A carried Systemship's own capacity is added by the caller.
 function hitCapacity(ship, racks = ship.SR) {
-  return ship.PD + ship.B + ship.S + ship.T + racks + Math.ceil(ship.M / MISSILES_PER_HIT);
+  return ship.PD + ship.B + ship.S + ship.T + racks + Math.ceil(ship.M / MISSILES_PER_HIT)
+    + (ship.C ?? 0) + Math.ceil((ship.SH ?? 0) / SHELLS_PER_HIT);
 }
 
 // Hits the owner places after Armor has taken its share (D-042).
@@ -178,10 +208,13 @@ function prepareRound(hex, orders) {
   }
   const ids = Object.keys(hex.ships);
 
-  // D-029: Missiles leave the stock when fired and cannot absorb this round's hits.
-  const afterFiring = Object.fromEntries(
-    ids.map((id) => [id, { ...hex.ships[id], M: hex.ships[id].M - missilesOf(orders[id]).length }]),
-  );
+  // D-029: Missiles leave the stock when fired and cannot absorb this round's hits. Shells too (D-050).
+  const afterFiring = Object.fromEntries(ids.map((id) => {
+    const ship = hex.ships[id];
+    const after = { ...ship, M: ship.M - missilesOf(orders[id]).length };
+    if (ship.SH != null) after.SH = ship.SH - sum(shellsOf(orders[id]));
+    return [id, after];
+  }));
 
   // Every weapon is read off the CRT from the orders as written (§7 step 2).
   const shots = [];
@@ -192,12 +225,17 @@ function prepareRound(hex, orders) {
       const cell = lookupCRT(row, orders[to].tactic, drive - power(orders[to], 'D'));
       // D-025: a Missile's Escapes is a Miss. A Beam's Escapes does no damage either.
       const damage = hitDamage(weapon, firer.level, cell.result === 'escapes' ? MISS : cell);
-      shots.push({ from: id, to, weapon: weapon.type, result: cell.result, bonus: cell.bonus, damage });
+      if (weapon.type === 'shells') shots.push({ from: id, to, weapon: 'cannon', shells: weapon.count, result: cell.result, bonus: cell.bonus, damage });
+      else shots.push({ from: id, to, weapon: weapon.type, result: cell.result, bonus: cell.bonus, damage });
     };
     if (order.beamTarget != null) {
       fire(order.beamTarget, { type: 'beam', power: order.B }, order.tactic, power(order, 'D'));
     }
     for (const m of missilesOf(order)) fire(m.target, { type: 'missile' }, 'attack', m.drive);
+    // Fan §5.4, D-048: each Cannon's burst is read like Beam fire, on the ship's own tactic and Drive.
+    if (order.cannonTarget != null) {
+      for (const n of shellsOf(order)) fire(order.cannonTarget, { type: 'shells', count: n }, order.tactic, power(order, 'D'));
+    }
   }
 
   // All hits on a ship are summed, then its Screen subtracts once (§7.2.2). Then Armor takes what it can of the
@@ -319,7 +357,8 @@ export function resolveRound(hex, orders, hitAllocations = {}) {
       continue;
     }
     // D-024: only Beam fire counts; with none on it the ship escapes. D-026: Missile hits don't stop it.
-    const beams = shots.filter((s) => s.to === id && s.weapon === 'beam');
+    // D-049: Cannon fire counts as Beam fire does.
+    const beams = shots.filter((s) => s.to === id && (s.weapon === 'beam' || s.weapon === 'cannon'));
     if (orders[id].tactic === 'retreat' && beams.every((s) => s.result === 'escapes')) {
       escaped[id] = ship;
       gone[id] = { owner, how: 'escaped' };

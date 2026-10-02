@@ -514,3 +514,54 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
   and is a ship with Armor left (everything else at zero) still afloat?
 - **Ruling (2026-10-01):** Yes, both. A ship may be built with only Armor, and is destroyed only when every attribute, Armor
   included, is zero.
+
+## J. Fan module: Cannons and Shells (docs/rules/fan-extended.md)
+
+### D-048 — Cannon targets and bursts
+- **Status:** RESOLVED
+- **Where:** fan §5.1 step 1; fan §10.2.3; fan §10.2.4; fan §5.3.1
+- **Text:** "A target enemy ship for Cannon fire, if any" / "Each Cannon may fire either one, two or three Shells
+  per combat round. 1 PD is required to power a Cannon" / "S32 (TL1) ATTACKS W3: D=3 C=1 (firing 3 shells) C=1
+  (firing 1 shell)" / "Hit +1 and +2 and TL extra damage is added per burst of Shells, not per individual Shell" /
+  "The result at this intersection is 'HIT' Both Shells hit."
+- **Question:** Do all of a ship's Cannons fire at one target ("a target … for Cannon fire"), or may each Cannon
+  pick its own? Is a "burst" the Shells one Cannon fires in a round, read once on the CRT so that all of them hit
+  or miss together, with the Hit bonus and tech level added once per burst?
+- **Ruling (2026-10-01):** One target, a burst per Cannon. All of a ship's Cannons fire at one target. Each Cannon's 1 to
+  3 Shells are one burst, read once on the CRT: all hit or all miss, and the Hit bonus and tech level are added
+  once per burst.
+
+### D-049 — Cannon fire and a retreating ship's escape
+- **Status:** RESOLVED
+- **Where:** fan §10.2.3; fan §5.3.1; D-024; D-026
+- **Text:** "Cannons are treated as Beams as far as combat goes, i.e. ship's drive setting is used on CRT" /
+  "In order to ESCAPE, a retreating ship must simultaneously obtain the ESCAPE result against EACH enemy ship (not
+  Missile) that fired on it." / D-024: "Only Beam fire counts toward escape."
+- **Question:** Does Cannon fire count like Beam fire toward a retreating ship's escape (it needs an Escapes
+  result against every ship firing Beams or Cannons at it), or like Missile fire (it never stops an escape)? A
+  Cannon's Escapes result does no damage, as a Beam's does not.
+- **Ruling (2026-10-01):** Like a Beam. A retreating ship escapes only with an Escapes result against every ship firing a Beam
+  or Cannons at it (D-024 extended). A Cannon's Escapes result does no damage.
+
+### D-050 — Shells by the six
+- **Status:** RESOLVED
+- **Where:** fan §10.2.4; fan §7.5; fan §5.5.1; classic §7.2.2; D-015; D-029
+- **Text:** "1 BP builds 6 shells." / "In other respects they are treated as Missiles" / "One BP replaces up to 3
+  Missiles or up to 6 Shells. … one BP CAN be used to resupply (for instance) 3 ships with one Missile each." /
+  (Missiles) "if a ship has 3 or more Missiles, a hit in Missiles must take out 3."
+- **Question:** Treated as Missiles, with 6 to the BP: is a design's Shell cost ceil(SH ÷ 6) BP (as D-015); does a
+  hit on Shells take out 6, or all of 1 to 5 left; do Shells fired leave the stock before hits are taken (as
+  D-029); and is Shell resupply pooled across ships at ceil(total ÷ 6) BP, separately from Missiles?
+- **Ruling (2026-10-01):** Sixes everywhere. Build cost ceil(SH ÷ 6) BP; a hit on Shells takes out 6, or all of 1 to 5 left;
+  Shells fired leave the stock before hits are taken; resupply is pooled across ships at ceil(total ÷ 6) BP,
+  separately from Missiles.
+
+### D-051 — Which games may use Cannons and Shells
+- **Status:** RESOLVED
+- **Where:** fan §10, §10.2; D-045
+- **Text:** "The Players are to agree at the beginning of the game to use one or more of the following ship
+  attributes"
+- **Question:** As with Armor (D-045): an option a game is created with, off by default, in any of the three
+  classic scenarios, with Shell resupply only where repair and resupply are used (Advanced)?
+- **Ruling (2026-10-01):** Same as Armor (D-045): an option a game is created with, off by default, in any of the three classic
+  scenarios. Shell resupply only where repair and resupply are used (Advanced).

@@ -10,7 +10,8 @@ import { displayId, plainIds } from './view.js';
 
 export const EMPTY_DESIGN = Object.freeze({ WG: true, PD: 0, B: 0, S: 0, T: 0, M: 0, SR: 0 });
 
-const LABELS = { PD: 'Power/Drive', B: 'Beam', S: 'Screen', T: 'Tubes', M: 'Missiles', SR: 'Systemship Racks', A: 'Armor' };
+const LABELS = { PD: 'Power/Drive', B: 'Beam', S: 'Screen', T: 'Tubes', M: 'Missiles', SR: 'Systemship Racks', A: 'Armor', C: 'Cannons', SH: 'Shells' };
+const SHELLS_PER_BP = 6; // fan §7.5, D-050; for showing the cost
 const MISSILES_PER_BP = 3; // for showing the cost; the engine charges it
 const ARMOR_REPAIR_PER_BP = 2; // fan §7.5, D-044; likewise
 
@@ -49,7 +50,12 @@ const compact = (design) => Object.fromEntries(Object.entries(design).filter(([k
 const cleanRepairs = (repairs = {}) => Object.fromEntries(
   Object.entries(repairs).map(([id, a]) => [id, Object.fromEntries(Object.entries(a).filter(([, n]) => n !== 0))]).filter(([, a]) => Object.keys(a).length > 0),
 );
-const cleanResupply = (resupply = {}) => Object.fromEntries(Object.entries(resupply).filter(([, n]) => n !== 0));
+// Resupply: { id: Missiles } or { id: { M, SH } } (Shells with the cannons module, D-050).
+const cleanResupply = (resupply = {}) => Object.fromEntries(Object.entries(resupply).map(([id, n]) => {
+  if (typeof n !== 'object' || n == null) return [id, n];
+  return [id, Object.fromEntries(Object.entries(n).filter(([, v]) => v !== 0))];
+}).filter(([, n]) => (typeof n === 'object' && n != null ? Object.keys(n).length > 0 : n !== 0)));
+const resupplied = (entry, kind) => (typeof entry === 'object' && entry != null ? Number(entry[kind]) || 0 : kind === 'M' ? Number(entry) || 0 : 0);
 
 export function buildAction(player, drafts, repairs = {}, resupply = {}) {
   const action = { type: 'build', player, ships: drafts.map(({ id, design, at }) => ({ id, design: compact(design), at })) };
@@ -75,8 +81,10 @@ export function buildCheck(state, player, { drafts = [], repairs = {}, resupply 
     }
   }
   points += Math.ceil(armorPoints / ARMOR_REPAIR_PER_BP);
-  const missiles = Object.values(cleanResupply(resupply)).reduce((sum, n) => sum + (Number(n) || 0), 0);
-  const resupplyCost = Math.ceil(missiles / MISSILES_PER_BP);
+  const entries = Object.values(cleanResupply(resupply));
+  const missiles = entries.reduce((sum, e) => sum + resupplied(e, 'M'), 0);
+  const shells = entries.reduce((sum, e) => sum + resupplied(e, 'SH'), 0);
+  const resupplyCost = Math.ceil(missiles / MISSILES_PER_BP) + Math.ceil(shells / SHELLS_PER_BP);
   const total = ships + points + resupplyCost;
   const r = applyAction(state, buildAction(player, drafts, repairs, resupply));
   return { ships, repairs: points, resupply: resupplyCost, total, left: state.bp[side] - total, message: r.ok ? null : plainIds(r.message) };
@@ -87,7 +95,7 @@ export function renderBuildCheck(state, player, ui) {
   const check = buildCheck(state, player, ui);
   const scenario = SCENARIOS[state.scenario];
   const parts = [`ships ${check.ships}`];
-  if (scenario.repair) parts.push(`repair ${check.repairs}`, `Missiles ${check.resupply}`);
+  if (scenario.repair) parts.push(`repair ${check.repairs}`, `resupply ${check.resupply}`);
   const out = [];
   out.push(`<p class="total">Total ${check.total} BP (${parts.join(', ')}) · <strong>${check.left} BP left</strong></p>`);
   if (check.message) out.push(`<p class="hint">${esc(check.message)}</p>`);
@@ -124,7 +132,8 @@ function renderRepairs(state, side, repairs, resupply) {
     return out.join('\n');
   }
   const armorNote = state.modules?.includes('armor') ? ' One BP repairs 2 points of Armor, across ships (D-044).' : '';
-  out.push(`<p class="hint">One BP repairs one point, up to the strength the ship was built with. One BP resupplies up to 3 Missiles, across ships (§5.3).${armorNote}</p>`);
+  const shellNote = state.modules?.includes('cannons') ? ' One BP resupplies up to 6 Shells, across ships (D-050).' : '';
+  out.push(`<p class="hint">One BP repairs one point, up to the strength the ship was built with. One BP resupplies up to 3 Missiles, across ships (§5.3).${armorNote}${shellNote}</p>`);
   out.push(`<form class="repairs" autocomplete="off">`);
   for (const { id, ship, carrier } of ships) {
     const where = carrier ? `carried by ${displayId(carrier)}` : `at ${starName(state.ships[id])}`;
@@ -132,8 +141,9 @@ function renderRepairs(state, side, repairs, resupply) {
     for (const a of attributesFor(state.modules)) {
       const missing = (ship.built?.[a] ?? 0) - (ship[a] ?? 0);
       if (missing <= 0) continue;
-      const value = a === 'M' ? (resupply[id] ?? 0) : (repairs[id]?.[a] ?? 0);
-      const label = a === 'M' ? `Missiles ${ship.M}/${ship.built.M}` : `${a} ${ship[a] ?? 0}/${ship.built[a]}`;
+      const ammo = a === 'M' || a === 'SH';
+      const value = ammo ? resupplied(resupply[id], a) : (repairs[id]?.[a] ?? 0);
+      const label = a === 'M' ? `Missiles ${ship.M}/${ship.built.M}` : a === 'SH' ? `Shells ${ship.SH ?? 0}/${ship.built.SH}` : `${a} ${ship[a] ?? 0}/${ship.built[a]}`;
       out.push(`<label><span>${label}</span><input type="number" name="${a}" min="0" max="${missing}" step="1" value="${value}" inputmode="numeric"></label>`);
     }
     out.push(`</div></fieldset>`);
@@ -170,7 +180,7 @@ export function renderBuilder(state, player, ui) {
   out.push(`<div class="attrs">`);
   for (const a of attributesFor(state.modules)) {
     if (a === 'SR' && !options.racks) continue;
-    const per = a === 'M' ? '3 per BP' : a === 'A' ? `${2 + level} points per BP` : '1 BP each';
+    const per = a === 'M' ? '3 per BP' : a === 'SH' ? '6 per BP' : a === 'A' ? `${2 + level} points per BP` : '1 BP each';
     out.push(`<label><span>${a}</span><input type="number" name="${a}" min="0" step="1" value="${design[a] ?? 0}" inputmode="numeric"><small>${LABELS[a]}, ${per}</small></label>`);
   }
   out.push(`</div>`);

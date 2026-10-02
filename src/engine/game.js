@@ -48,7 +48,11 @@ const MISSILES_PER_BP = 3;
 
 // Fan rules a game may be created with (Phase 8, docs/rules/fan-modules.md). None by default.
 //   armor: Armor, A (fan §10.2.2, §7.5; D-042 to D-047), in any scenario (D-045).
-export const MODULES = ['armor'];
+//   cannons: Cannons, C, and Shells, SH (fan §10.2.3, §10.2.4, §7.5; D-048 to D-051), in any scenario.
+export const MODULES = ['armor', 'cannons'];
+
+// Fan §7.5, D-050: one BP resupplies up to 6 Shells, across ships.
+const SHELLS_PER_BP = 6;
 
 // Fan §7.5, D-044: Armor is repaired at 1 BP per 2 points, regardless of tech level, pooled across ships.
 const ARMOR_REPAIR_PER_BP = 2;
@@ -176,7 +180,8 @@ function contestedStars(s) {
 
 // D-009, D-038: a ship is effective if it has PD of 1 or more and is a Warpship or carries a weapon it can
 // power: a Beam (D-030), or a Tube with a Missile. Carried Systemships count too.
-const effective = (ship) => ship.PD >= 1 && (ship.WG || ship.B >= 1 || (ship.T >= 1 && ship.M >= 1));
+const effective = (ship) => ship.PD >= 1
+  && (ship.WG || ship.B >= 1 || (ship.T >= 1 && ship.M >= 1) || ((ship.C ?? 0) >= 1 && (ship.SH ?? 0) >= 1));
 
 const hasEffectiveShip = (s, side) =>
   Object.values(s.ships).some((sh) => sh.owner === side && (effective(sh) || Object.values(sh.carrying ?? {}).some(effective)));
@@ -326,8 +331,10 @@ function build(s, action) {
     if (!isObject(amounts)) reject('BAD_REPAIR', `${id}: a repair maps attributes to points`);
     for (const [attr, n] of Object.entries(amounts)) {
       if (attr === 'M') reject('BAD_REPAIR', `${id}: Missiles are resupplied, not repaired (§5.3)`);
+      if (attr === 'SH') reject('BAD_REPAIR', `${id}: Shells are resupplied, not repaired (fan §7.5)`);
       const isArmor = attr === 'A' && s.modules.includes('armor');
-      if (!ATTRIBUTES.includes(attr) && !isArmor) reject('BAD_REPAIR', `${id}: cannot repair ${attr}`);
+      const isCannon = attr === 'C' && s.modules.includes('cannons');
+      if (!ATTRIBUTES.includes(attr) && !isArmor && !isCannon) reject('BAD_REPAIR', `${id}: cannot repair ${attr}`);
       if (!Number.isInteger(n) || n < 1) reject('BAD_REPAIR', `${id}: repair ${attr} by a whole number of points, 1 or more`);
       if ((record[attr] ?? 0) + n > (record.built[attr] ?? 0)) {
         reject('OVER_BUILT', `${id}: ${attr} ${record[attr] ?? 0} + ${n} is more than the ${record.built[attr] ?? 0} it was built with (§5.3)`);
@@ -336,17 +343,25 @@ function build(s, action) {
       else total += n;
     }
   }
-  // §5.3: one BP resupplies up to 3 Missiles, across ships; fractions of a BP are not saved.
+  // §5.3: one BP resupplies up to 3 Missiles, across ships; fractions of a BP are not saved. Shells likewise, 6
+  // to the BP, in their own pool (fan §7.5, D-050). resupply: { id: Missiles } or { id: { M, SH } }.
   let missiles = 0;
-  for (const [id, n] of Object.entries(resupply)) {
-    if (!Number.isInteger(n) || n < 1) reject('BAD_REPAIR', `${id}: resupply a whole number of Missiles, 1 or more`);
-    const record = repairable(s, side, id);
-    if (record.M + n > record.built.M) {
-      reject('OVER_BUILT', `${id}: ${record.M} + ${n} Missiles is more than the ${record.built.M} it was built with (§5.3)`);
+  let shells = 0;
+  const amounts = (n) => (isObject(n) ? n : { M: n });
+  for (const [id, entry] of Object.entries(resupply)) {
+    for (const [kind, n] of Object.entries(amounts(entry))) {
+      if (kind !== 'M' && !(kind === 'SH' && s.modules.includes('cannons'))) reject('BAD_REPAIR', `${id}: cannot resupply ${kind}`);
+      const what = kind === 'M' ? 'Missiles' : 'Shells';
+      if (!Number.isInteger(n) || n < 1) reject('BAD_REPAIR', `${id}: resupply a whole number of ${what}, 1 or more`);
+      const record = repairable(s, side, id);
+      if ((record[kind] ?? 0) + n > (record.built[kind] ?? 0)) {
+        reject('OVER_BUILT', `${id}: ${record[kind] ?? 0} + ${n} ${what} is more than the ${record.built[kind] ?? 0} it was built with (§5.3)`);
+      }
+      if (kind === 'M') missiles += n;
+      else shells += n;
     }
-    missiles += n;
   }
-  total += Math.ceil(missiles / MISSILES_PER_BP) + Math.ceil(armor / ARMOR_REPAIR_PER_BP);
+  total += Math.ceil(missiles / MISSILES_PER_BP) + Math.ceil(shells / SHELLS_PER_BP) + Math.ceil(armor / ARMOR_REPAIR_PER_BP);
 
   if (total > s.bp[side]) reject('OVER_BP', `This costs ${total} BP but you have ${s.bp[side]}`);
   if (scenario.spendAll && total < s.bp[side]) {
@@ -361,7 +376,10 @@ function build(s, action) {
     const record = repairable(s, side, id);
     for (const [attr, n] of Object.entries(amounts)) record[attr] += n;
   }
-  for (const [id, n] of Object.entries(resupply)) repairable(s, side, id).M += n;
+  for (const [id, entry] of Object.entries(resupply)) {
+    const record = repairable(s, side, id);
+    for (const [kind, n] of Object.entries(amounts(entry))) record[kind] = (record[kind] ?? 0) + n;
+  }
   s.bp[side] -= total;
   s.hasBuilt[side] = true;
   s.step = 'movement';
