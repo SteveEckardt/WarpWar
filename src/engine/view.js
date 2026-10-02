@@ -20,6 +20,14 @@ export function actingSide(state) {
   return state.active;
 }
 
+// The player whose decision the game is waiting for, or null. Setup has one decision for a player: once the first
+// player is set, the player moving second chooses the side (§4). That is made openly, before there are sides.
+export function actingPlayer(state) {
+  if (state.step === 'setup') return state.first == null ? null : state.players.find((p) => p !== state.first);
+  const side = actingSide(state);
+  return side == null ? null : state.players.find((p) => state.sides[p] === side);
+}
+
 // D-039: an enemy ship is its counter: position (on the map), Warpship or Systemship, and the counter number,
 // which is its id. Its cargo is not on the map. In combat its tech level is shown as well: it is revealed with
 // the orders (D-055).

@@ -2,7 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createGame, applyAction } from '../src/engine/game.js';
-import { actingSide, viewFor } from '../src/engine/view.js';
+import { actingSide, actingPlayer, viewFor } from '../src/engine/view.js';
 import { createController, createLocalController, CONTROLLER_KINDS } from '../src/play/controllers.js';
 import { createGameLoop } from '../src/play/loop.js';
 import { actor, needsHandoff } from '../src/ui/view.js';
@@ -86,7 +86,7 @@ const ECM = [
   { type: 'allocateEcm', player: 'ann', ecm: { 'A-W1': { 'B-W1:0': { points: 2, shift: -1 } } } },
 ];
 
-const local = () => ({ A: createLocalController(), B: createLocalController() });
+const local = () => ({ ann: createLocalController(), bob: createLocalController() });
 
 // Plays actions through the loop as the players at the screen would: each by whichever local controller is
 // asked. check(state, request) runs at each request, before the action is submitted.
@@ -96,6 +96,7 @@ async function drive(loop, controllers, actions, check = () => {}) {
     assert.equal(asked.length, 1, 'one controller is asked at a time');
     const [c] = asked;
     assert.equal(c.request.side, actingSide(loop.state));
+    assert.equal(c.request.player, actingPlayer(loop.state));
     check(loop.state, c.request);
     const r = await c.submit(action);
     assert.deepEqual(r, { ok: true }, `${action.type} by ${action.player}: ${r.message}`);
@@ -170,26 +171,42 @@ describe('actingSide: whose decision the loop waits for', () => {
     }
   });
 
-  test('nobody during setup or once the game is over', () => {
+  test('no side during setup or once the game is over', () => {
     assert.equal(actingSide(createGame({ map: mapData, scenario: 'learning', players: ['ann', 'bob'] })), null);
     assert.equal(actingSide({ ...sidesChosen(), step: 'over' }), null);
+  });
+});
+
+describe('actingPlayer: whose controller the loop asks', () => {
+  test('in setup, the player moving second once the first is set (§4); nobody before', () => {
+    const s = createGame({ map: mapData, scenario: 'learning', players: ['ann', 'bob'] });
+    assert.equal(actingPlayer(s), null);
+    assert.equal(actingPlayer(play(s, SETUP[0])), 'bob');
+  });
+
+  test("then the acting side's player; nobody once the game is over", () => {
+    let s = sidesChosen();
+    for (const action of [...TO_COMBAT, ORDERS.bob, ORDERS.ann, ...HITS]) {
+      assert.equal(actingPlayer(s), action.player);
+      s = play(s, action);
+    }
+    assert.equal(actingPlayer({ ...sidesChosen(), step: 'over' }), null);
   });
 });
 
 describe('controllers', () => {
   test('local, computer or remote', () => {
     assert.deepEqual(CONTROLLER_KINDS, ['local', 'computer', 'remote']);
-    for (const kind of CONTROLLER_KINDS) assert.equal(createController(kind).kind, kind);
+    for (const kind of CONTROLLER_KINDS) assert.equal(createController(kind, { seed: 1 }).kind, kind);
     assert.throws(() => createController('robot'), RangeError);
   });
 
-  test('computer and remote are not implemented yet', () => {
-    assert.throws(() => createController('computer').nextAction(viewFor(sidesChosen(), 'A'), { side: 'A' }), /not implemented/);
-    assert.throws(() => createController('remote').nextAction(viewFor(sidesChosen(), 'A'), { side: 'A' }), /not implemented/);
+  test('remote is not implemented yet', () => {
+    assert.throws(() => createController('remote').nextAction(viewFor(sidesChosen(), 'A'), { side: 'A', player: 'ann' }), /not implemented/);
   });
 
-  test('a loop that asks a computer side stops with that error', async () => {
-    const loop = createGameLoop({ state: sidesChosen(), controllers: { A: createController('computer'), B: createLocalController() } });
+  test('a loop that asks a remote player stops with that error', async () => {
+    const loop = createGameLoop({ state: sidesChosen(), controllers: { ann: createController('remote'), bob: createLocalController() } });
     await assert.rejects(loop.run(), /not implemented/);
   });
 
@@ -205,15 +222,28 @@ describe('the game loop', () => {
     const controllers = local();
     const loop = createGameLoop({ state: sidesChosen(), controllers });
     loop.run();
-    assert.equal(controllers.B.request, null);
-    const { view, side, rejection } = controllers.A.request;
+    assert.equal(controllers.bob.request, null);
+    const { view, side, player, rejection } = controllers.ann.request;
     assert.equal(side, 'A');
+    assert.equal(player, 'ann');
     assert.equal(rejection, null);
     assert.deepEqual(view, viewFor(loop.state, 'A'));
     await drive(loop, controllers, TO_COMBAT.slice(0, 4));
     assert.equal(loop.state.active, 'B');
-    assert.equal(controllers.A.request, null);
-    assert.equal(controllers.B.request.side, 'B');
+    assert.equal(controllers.ann.request, null);
+    assert.equal(controllers.bob.request.side, 'B');
+  });
+
+  test('starts in setup: the player moving second chooses the side through their controller (§4)', async () => {
+    const controllers = local();
+    const loop = createGameLoop({ state: play(createGame({ map: mapData, scenario: 'learning', players: ['ann', 'bob'] }), SETUP[0]), controllers });
+    loop.run();
+    assert.equal(controllers.ann.request, null);
+    assert.deepEqual(controllers.bob.request, { view: viewFor(loop.state, null), side: null, player: 'bob', rejection: null });
+    assert.equal((await controllers.bob.submit({ type: 'chooseSide', player: 'bob', side: 'X' })).code, 'BAD_SIDE');
+    assert.deepEqual(await controllers.bob.submit(SETUP[1]), { ok: true });
+    assert.deepEqual(loop.state, sidesChosen());
+    assert.equal(controllers.ann.request.side, 'A');
   });
 
   test('a controller never sees the state: enemy records and secret orders are not in its view', async () => {
@@ -221,7 +251,7 @@ describe('the game loop', () => {
     const loop = createGameLoop({ state: play(sidesChosen(), ...TO_COMBAT), controllers });
     loop.run();
     await drive(loop, controllers, [ORDERS.bob]);
-    const { view } = controllers.A.request;
+    const { view } = controllers.ann.request;
     assert.notDeepEqual(view, loop.state);
     assert.deepEqual(view.combat.orders.B, {});
     assert.equal(view.ships['B-W1'].PD, undefined);
@@ -232,23 +262,23 @@ describe('the game loop', () => {
     const start = sidesChosen();
     const loop = createGameLoop({ state: start, controllers });
     loop.run();
-    const r = await controllers.A.submit({ type: 'build', player: 'ann', ships: [{ id: 'A-W1', design: { WG: true, PD: 99 }, at: 'ur' }] });
+    const r = await controllers.ann.submit({ type: 'build', player: 'ann', ships: [{ id: 'A-W1', design: { WG: true, PD: 99 }, at: 'ur' }] });
     assert.equal(r.ok, false);
     assert.equal(typeof r.message, 'string');
     assert.equal('state' in r, false, 'the outcome carries no state');
     assert.equal(loop.state, start);
-    assert.deepEqual(controllers.A.request.rejection, { code: r.code, message: r.message });
+    assert.deepEqual(controllers.ann.request.rejection, { code: r.code, message: r.message });
     await drive(loop, controllers, TO_COMBAT.slice(0, 1));
-    assert.equal(controllers.A.request.rejection, null, 'cleared once an action is accepted');
+    assert.equal(controllers.ann.request.rejection, null, 'cleared once an action is accepted');
   });
 
   test('a side may act only for its own player', async () => {
     const controllers = local();
     const loop = createGameLoop({ state: sidesChosen(), controllers });
     loop.run();
-    const r = await controllers.A.submit({ type: 'endMovement', player: 'bob' });
+    const r = await controllers.ann.submit({ type: 'endMovement', player: 'bob' });
     assert.equal(r.code, 'NOT_YOUR_SIDE');
-    assert.equal(controllers.A.request.side, 'A');
+    assert.equal(controllers.ann.request.side, 'A');
   });
 
   test('reports each accepted action to the shared screen, with the states before and after', async () => {
@@ -277,8 +307,8 @@ describe('the game loop', () => {
     const final = await done;
     assert.equal(final.step, 'over');
     assert.equal(final.result.player, 'ann');
-    assert.equal(controllers.A.request, null);
-    assert.equal(controllers.B.request, null);
+    assert.equal(controllers.ann.request, null);
+    assert.equal(controllers.bob.request, null);
   });
 
   test('stop: the waiting action is not applied', async () => {
@@ -287,7 +317,7 @@ describe('the game loop', () => {
     const loop = createGameLoop({ state: start, controllers });
     const done = loop.run();
     loop.stop();
-    controllers.A.submit(TO_COMBAT[0]);
+    controllers.ann.submit(TO_COMBAT[0]);
     assert.equal(await done, start);
   });
 });
@@ -355,7 +385,7 @@ describe('hot-seat: two local controllers play as before', () => {
     loop.run();
     await drive(loop, controllers, ECM.slice(0, 2), sameScreens);
     assert.equal(loop.state.combat.stage, 'ecm');
-    sameScreens(loop.state, controllers.A.request);
+    sameScreens(loop.state, controllers.ann.request);
     await drive(loop, controllers, ECM.slice(2), sameScreens);
   });
 

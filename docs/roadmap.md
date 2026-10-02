@@ -1,6 +1,6 @@
 # Roadmap
 
-Current phase: 9a
+Current phase: 9b-1
 
 0. Rules extraction: PDF to docs/rules/classic.md, ambiguities logged
 1. Ship building: attributes, BP costs, validation
@@ -38,5 +38,15 @@ Current phase: 9a
    viewFor(state, side), never the state, and answers with actions; the game loop passes them to applyAction
 9a. Player controllers: refactor only. Hot-seat is two local controllers and plays as before; the handoff screen
     only comes between two local controllers; computer and remote are stubs
-9b. Computer opponent
+9b. Computer opponent: a "computer" controller, handed only viewFor(state, side); it tries candidate actions with
+    applyAction on a copy of its view and keeps no rules of its own; seeded, so a seed always plays the same game
+9b-1. Random legal player, Learning only: the second player's choice of side moves into the loop as an action, so
+    controllers belong to players; Human or Computer for each player on the setup screen, with a short delay
+    before each computer action; computer vs computer plays to a win or draw on at least 50 seeds
+9b-2. Random legal player for Basic and Advanced: Systemships, racks and carrying (§6.2, §7.3, §8), saved BP,
+    repair and resupply, then the fan modules (Armor, Cannons, ECM)
+9b-3. A computer that plays to win: builds, moves toward enemy bases, picks fights and combat orders by simple
+    rules of thumb, still only from its view; measured against the random player over many seeds
+9b-4. Difficulty levels and polish: a choice of computer strength on the setup screen, a seed shown for replays,
+    pacing controls for watching computer vs computer
 9c. Remote play over WebSockets

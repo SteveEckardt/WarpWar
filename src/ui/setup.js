@@ -17,8 +17,15 @@ const MODULE_TEXT = {
   ecm: 'ECM (fan §7.1.1), Advanced only: ECM powered from PD moves incoming Missiles\' Drive up or down, after orders are revealed.',
 };
 
-// values: { player1, player2, first: 0 | 1, scenario, modules, error }.
-export function renderNewGame({ player1 = 'Player 1', player2 = 'Player 2', first = 0, scenario = 'learning', modules = [], error = null } = {}) {
+// Who plays each player: someone at this screen, or the computer (Phase 9b-1: the Learning scenario only).
+const SEAT_TEXT = { local: 'Human', computer: 'Computer' };
+
+// values: { player1, player2, seats: [kind, kind], first: 0 | 1, scenario, modules, error }.
+export function renderNewGame({
+  player1 = 'Player 1', player2 = 'Player 2', seats = ['local', 'local'], first = 0, scenario = 'learning', modules = [], error = null,
+} = {}) {
+  const seat = (n) => `<select name="seat${n + 1}" aria-label="Player ${n + 1} is">${Object.entries(SEAT_TEXT)
+    .map(([kind, text]) => `<option value="${kind}"${seats[n] === kind ? ' selected' : ''}>${text}</option>`).join('')}</select>`;
   const module = (id) => `<label class="scenario"><input type="checkbox" name="module" value="${id}"${modules.includes(id) ? ' checked' : ''}> ${MODULE_TEXT[id]}</label>`;
   const radio = (n) => `<input type="radio" name="first" value="${n}"${first === n ? ' checked' : ''}>`;
   const choice = (id) => `<label class="scenario"><input type="radio" name="scenario" value="${id}"${scenario === id ? ' checked' : ''}> ${SCENARIO_TEXT[id]}</label>`;
@@ -27,8 +34,9 @@ export function renderNewGame({ player1 = 'Player 1', player2 = 'Player 2', firs
     `<form class="new-game" autocomplete="off">`,
     `<fieldset><legend>Scenario</legend>${Object.keys(SCENARIO_TEXT).map(choice).join('')}</fieldset>`,
     `<fieldset><legend>Fan rules (optional)</legend>${Object.keys(MODULE_TEXT).map(module).join('')}</fieldset>`,
-    `<label>Player 1 <input name="player1" value="${esc(player1)}" required maxlength="24"></label>`,
-    `<label>Player 2 <input name="player2" value="${esc(player2)}" required maxlength="24"></label>`,
+    `<div class="seat"><label>Player 1 <input name="player1" value="${esc(player1)}" required maxlength="24"></label>${seat(0)}</div>`,
+    `<div class="seat"><label>Player 2 <input name="player2" value="${esc(player2)}" required maxlength="24"></label>${seat(1)}</div>`,
+    `<p class="hint">The computer plays the Learning scenario only, at random.</p>`,
     `<fieldset><legend>Who moves first?</legend>`,
     `<label>${radio(0)} Player 1</label> <label>${radio(1)} Player 2</label>`,
     `</fieldset>`,

@@ -1,14 +1,15 @@
 // The page: keeps the shared screen, runs the game loop, renders, and turns clicks into engine actions.
-// Every change to the game goes through applyAction. Once sides are chosen the game loop holds the state and asks
-// each side's controller for its actions (src/play/); here both sides are local (hot-seat). A local player's
-// screen is drawn only from the view their controller was handed (D-039); the real state is used only for what
+// Every change to the game goes through applyAction. Once the first player is set the game loop holds the state and
+// asks each player's controller for their actions (src/play/), starting with the second player's choice of side.
+// Each player is local (at this screen) or the computer, whose actions come after a short delay so they can be
+// followed. A local player's screen is drawn only from their view (D-039); the real state is used only for what
 // both players see together: the status line, the game log and a round's public report.
 // D-039: between two local players, private views wait behind a handoff screen until the player who must act
 // says they are at the screen. A round's public report (§7 step 2) is shown to both players before the next
 // handoff. Add ?sample to the URL to load the Phase 7a sample game.
 
 import { createGame, applyAction } from '../engine/game.js';
-import { actingSide, viewFor } from '../engine/view.js';
+import { actingPlayer, viewFor } from '../engine/view.js';
 import { createController } from '../play/controllers.js';
 import { createGameLoop } from '../play/loop.js';
 import { starAt } from '../engine/map.js';
@@ -37,13 +38,16 @@ const mainEl = document.querySelector('main');
 // The shared screen's copy of the game: set up here, then changed only by the loop.
 let game = null;
 let loop = null;
-let controllers = null; // { A, B }
-const SEATS = { A: 'local', B: 'local' };
+let controllers = null; // { [player]: controller }
+
+// The pause before each computer action, so a human can follow it.
+const COMPUTER_DELAY_MS = 700;
 
 const ui = {
   mapData: null,
   preview: null, // an empty Learning game, for showing the map before setup
   viewer: null, // the player who last said they are at the screen
+  solo: null, // the only local player, against the computer
   selected: null, // the hex { q, r } whose ships the panel shows
   plan: null, // the move being planned: { ship, steps }
   setup: {},
@@ -65,18 +69,25 @@ const ui = {
   logOpen: false,
 };
 
+// The controller whose decision the game is waiting for, or null.
+function waitingFor() {
+  const player = game && actingPlayer(game);
+  return player ? controllers?.[player] ?? null : null;
+}
+
 // The local controller whose decision the game is waiting for, or null.
 function localTurn() {
-  const side = game && actingSide(game);
-  const c = side ? controllers?.[side] : null;
+  const c = waitingFor();
   return c?.kind === 'local' && c.request ? c : null;
 }
 
-// What the screen may show: the waiting local player's view, else what both players see (D-039). Once the game
-// is over that is everything; during setup there is nothing private yet.
-const view = () => localTurn()?.request.view ?? viewFor(game, null);
+// What the screen may show: the waiting local player's view; else, against the computer, the human's own view;
+// else what both players see (D-039). Once the game is over that is everything; in setup nothing is private yet.
+const view = () => localTurn()?.request.view ?? viewFor(game, (ui.solo && game.sides?.[ui.solo]) ?? null);
 
-const kinds = () => controllers && Object.fromEntries(Object.entries(controllers).map(([side, c]) => [side, c.kind]));
+// Controller kinds by side, once there are sides.
+const kinds = () => controllers && game?.sides
+  && Object.fromEntries(Object.entries(game.sides).map(([player, side]) => [side, controllers[player].kind]));
 const errorHtml = () => (ui.error ? `<p class="error" role="alert">${esc(ui.error)}</p>` : '');
 
 // Starts fresh combat drafts when the decision at hand is a new one.
@@ -109,6 +120,9 @@ function placementPlan() {
 function actionsHtml() {
   if (!game) return renderNewGame(ui.setup);
   const g = view();
+  if (g.step !== 'over' && waitingFor()?.kind === 'computer') {
+    return `<p class="hint">The computer is playing for ${esc(actingPlayer(game))}…</p>`;
+  }
   if (g.step === 'setup') return renderChooseSide(g);
   if (g.step === 'build') return renderBuilder(g, ui.viewer, ui);
   if (g.step === 'movement') return renderMovement(g, ui.viewer, ui);
@@ -179,28 +193,32 @@ async function act(action) {
   return true;
 }
 
-// Setup is decided openly at the shared screen (§4), before the sides have controllers.
-function actOpenly(action) {
-  const r = applyAction(game, action);
-  if (!r.ok) {
-    ui.error = plainIds(r.message);
-    return false;
-  }
-  ui.log.push(...logEntries(game, action, r.state));
-  game = r.state;
-  ui.error = null;
-  return true;
+// The computer, pausing before each action so a human can follow it.
+function pacedComputer() {
+  const computer = createController('computer', { seed: Math.floor(Math.random() * 2 ** 31) });
+  return {
+    kind: computer.kind,
+    async nextAction(v, options) {
+      await new Promise((done) => setTimeout(done, COMPUTER_DELAY_MS));
+      return computer.nextAction(v, options);
+    },
+  };
 }
 
-// Hands the game to the loop once the sides are chosen.
-function startLoop() {
-  controllers = Object.fromEntries(Object.entries(SEATS).map(([side, kind]) => [side, createController(kind)]));
+// Hands the game to the loop once the first player is set. seats: { [player]: 'local' | 'computer' }.
+function startLoop(seats) {
+  controllers = Object.fromEntries(Object.entries(seats).map(([player, kind]) => [player, kind === 'computer' ? pacedComputer() : createController(kind)]));
+  const locals = Object.keys(seats).filter((p) => seats[p] === 'local');
+  ui.solo = locals.length === 1 ? locals[0] : null;
+  ui.viewer = ui.solo;
   loop = createGameLoop({
     state: game,
     controllers,
     onAction(before, action, after) {
       ui.log.push(...logEntries(before, action, after));
       game = after;
+      // A local player's action is drawn by its click handler; the computer's here, once the loop has moved on.
+      if (controllers?.[action.player]?.kind !== 'local') setTimeout(render);
     },
   });
   const running = loop;
@@ -221,15 +239,29 @@ function startGame(form) {
   const first = Number(data.get('first'));
   const scenario = String(data.get('scenario') ?? 'learning');
   const modules = data.getAll('module').map(String);
-  ui.setup = { player1: players[0], player2: players[1], first, scenario, modules };
+  const seats = [String(data.get('seat1') ?? 'local'), String(data.get('seat2') ?? 'local')];
+  ui.setup = { player1: players[0], player2: players[1], seats, first, scenario, modules };
+  if (seats.includes('computer') && scenario !== 'learning') {
+    ui.setup.error = 'The computer plays the Learning scenario only, for now.';
+    return;
+  }
+  let created;
   try {
-    game = createGame({ map: ui.mapData, scenario, players, modules });
+    created = createGame({ map: ui.mapData, scenario, players, modules });
   } catch (e) {
     ui.setup.error = e.message;
     return;
   }
-  ui.log = [];
-  actOpenly({ type: 'setFirstPlayer', player: players[first] });
+  // Who moves first is settled on this form (§4); the second player's choice of end comes through the loop.
+  const action = { type: 'setFirstPlayer', player: players[first] };
+  const r = applyAction(created, action);
+  if (!r.ok) {
+    ui.setup.error = r.message;
+    return;
+  }
+  ui.log = logEntries(created, action, r.state);
+  game = r.state;
+  startLoop({ [players[0]]: seats[0], [players[1]]: seats[1] });
 }
 
 const count = (input) => (input.value.trim() === '' ? 0 : Number(input.value));
@@ -325,14 +357,13 @@ const handlers = {
     stopLoop();
     game = null;
     Object.assign(ui, {
-      viewer: null, selected: null, plan: null, design: { ...EMPTY_DESIGN }, drafts: [], repairs: {}, resupply: {}, error: null,
+      viewer: null, solo: null, selected: null, plan: null, design: { ...EMPTY_DESIGN }, drafts: [], repairs: {}, resupply: {}, error: null,
       draftKey: null, orders: {}, allocations: {}, dest: {}, placing: null, pickups: {}, rearrange: {}, seen: new Set(), log: [], logOpen: false,
     });
     ui.setup = { ...ui.setup, error: null };
   },
-  side(el) {
-    const second = game.players.find((p) => p !== game.first);
-    if (actOpenly({ type: 'chooseSide', player: second, side: el.dataset.side })) startLoop();
+  async side(el) {
+    await act({ type: 'chooseSide', player: actingPlayer(game), side: el.dataset.side });
   },
   add() {
     const form = panelEl.querySelector('form.design');
@@ -579,7 +610,7 @@ try {
   ui.preview = createGame({ map: ui.mapData, scenario: 'learning', players: ['1', '2'] });
   if (new URLSearchParams(location.search).has('sample')) {
     game = sampleGame(ui.mapData);
-    startLoop();
+    startLoop(Object.fromEntries(game.players.map((p) => [p, 'local'])));
   }
   render();
 } catch (e) {
