@@ -1,6 +1,8 @@
 // Who is at the screen and what they may see. D-039: a player sees their own ship records; of enemy ships
 // only the counters (position, Warpship or Systemship, counter number). Everything is shown once the game is over.
 
+import { actingSide } from '../engine/view.js';
+
 // Engine ids carry the side so both players can have a W1: 'A-W1' is shown as 'W1'.
 export const displayId = (id) => id.replace(/^[AB]-/, '');
 
@@ -12,21 +14,19 @@ export const playerOf = (state, side) => (state.sides ? state.players.find((p) =
 // The player whose private view the next decision needs, or null when it is made openly (setup) or nobody acts.
 // In combat both players decide: orders, hits and retreats go phasing player first, then the other (§7).
 export function actor(state) {
-  if (state.step === 'setup' || state.step === 'over' || !state.active) return null;
-  const c = state.combat;
-  if (state.step === 'combat' && c) {
-    const order = [state.active, state.active === 'A' ? 'B' : 'A'];
-    let side = state.active;
-    if (c.stage === 'orders') side = order.find((sd) => !c.orders[sd]);
-    else if (c.stage === 'ecm') side = order.find((sd) => c.needEcm.includes(sd) && !c.ecm[sd]);
-    else if (c.stage === 'hits') side = order.find((sd) => c.needHits.includes(sd) && !c.allocations[sd]);
-    else if (c.stage === 'retreats') side = order.find((sd) => Object.values(c.retreating).some((sh) => sh.owner === sd));
-    return side ? playerOf(state, side) : null;
-  }
-  return playerOf(state, state.active);
+  const side = actingSide(state);
+  return side ? playerOf(state, side) : null;
 }
 
 export function seesRecords(state, viewer, side) {
   if (state.step === 'over') return true;
   return viewer != null && state.sides?.[viewer] === side;
+}
+
+// D-039: a local player's private view waits behind a "pass to <player>" screen until they say they are at the
+// screen. Only between two local players: kinds is { A, B } of controller kinds, or null before sides are chosen.
+export function needsHandoff(state, kinds, viewer) {
+  if (!state || kinds == null || !Object.values(kinds).every((k) => k === 'local')) return false;
+  const next = actor(state);
+  return next != null && viewer !== next;
 }

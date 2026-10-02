@@ -1,6 +1,6 @@
 # Roadmap
 
-Current phase: 8d
+Current phase: 9a
 
 0. Rules extraction: PDF to docs/rules/classic.md, ambiguities logged
 1. Ship building: attributes, BP costs, validation
@@ -34,3 +34,9 @@ Current phase: 8d
 8c. Cannons and Shells (fan §10.2.3, §10.2.4, §5.3.1, §7.5)
 8d. ECM (fan §7.1.1, §7.2, §5.6): a new step in the combat round to spread ECM over incoming Missiles
 8e+. One slice per further module the owner picks, in the order chosen
+9. Opponents beyond the shared screen: each side has a controller (local, computer or remote) that is handed
+   viewFor(state, side), never the state, and answers with actions; the game loop passes them to applyAction
+9a. Player controllers: refactor only. Hot-seat is two local controllers and plays as before; the handoff screen
+    only comes between two local controllers; computer and remote are stubs
+9b. Computer opponent
+9c. Remote play over WebSockets

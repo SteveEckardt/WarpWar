@@ -428,6 +428,18 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
   area the renderers already draw, the stars plus 2 hexes all round: x from -13 to 13, r from -8 to 8. A move,
   retreat or withdrawal may not end a step off the map. A map without bounds (the test maps) has no edge.
 
+### D-055 — Enemy tech level in combat
+- **Status:** RESOLVED
+- **Where:** §7.1.2, §7.1.3; §5.2; D-039; D-053
+- **Text:** "W3 (Level 0) ATTACKS S25: D=0, B=3, S=2, T=0." / "S25 (Level 0) DODGE: D=4, B=0, S=0, T=1." /
+  D-039: "Of enemy ships they see only what the counters show: position, Warpship or Systemship, and the counter
+  number."
+- **Question:** A ship's tech level is on its record, which D-039 hides from the enemy. But the written orders in
+  the rulebook examples name each ship's level, the round report (§7 step 2) shows the orders, and an ECM defender
+  needs each incoming Missile's level (D-053). May a player see an enemy ship's tech level in combat?
+- **Ruling (2026-10-01):** Tech level is revealed with combat orders (§7 orders include the level), so enemy tech
+  level is visible in combat. Consistent with D-039.
+
 ## H. Scenarios
 
 ### D-041 — Victory points: running total or bases held at once
