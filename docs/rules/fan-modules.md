@@ -39,7 +39,7 @@ data only as images (as with the classic map, D-019), so the owner must supply o
 |---|---|---|---|
 | **Armor** (built, Phase 8b; D-042 to D-047) | Attribute A: 1 BP builds (2 + TL) points; each point absorbs one point of damage; repaired at 1 BP per 2 points (§10.2.2, §7.5) | S | none |
 | **Cannons and Shells** (built, Phase 8c; D-048 to D-051) | Attributes C and SH: 1 PD powers a Cannon for 1 to 3 Shells; read on the CRT like a Beam (ship's own Drive); 1 hit per Shell, Hit bonus and TL added per burst; not with Beams or Screens, allowed with Missiles; 6 Shells per BP, resupplied likewise (§10.2.3, §10.2.4, §5.3.1, §7.5) | M | none |
-| **ECM** | Attribute E: powered from PD; after orders are revealed the defender spreads ECM points over incoming Missiles, each point changing that Missile's Drive setting, adjusted by the tech-level difference (§7.1.1, §7.2) | M | a new step in the combat round |
+| **ECM** (built, Phase 8d; D-052 to D-054) | Attribute E: powered from PD; after orders are revealed the defender spreads ECM points over incoming Missiles, each point changing that Missile's Drive setting, adjusted by the tech-level difference (§7.1.1, §7.2) | M | a new step in the combat round |
 | **Advanced Warp Generators** | Small (3 BP, ships up to 9 BP, no racks, 1 PD per MP), Medium (5 BP, up to 45 BP, 2 PD per MP), Large (15 BP, 45+ BP, 3 PD per MP) (§10.2.1) | S | none |
 
 Open questions found so far:
@@ -51,7 +51,7 @@ Open questions found so far:
   ship for Cannon fire")? Is a "burst" the Shells from one Cannon? Does Cannon fire count like a Beam for a
   retreating ship's Escape (D-024 counts only Beams)? The §5.5.1 order format lists Cannons among attributes
   that take hits: confirm.
-- **ECM.** May ECM move a Missile's Drive up as well as down (raising it past +4 makes it miss)? Is the
+- **ECM.** *Resolved as D-052 to D-054.* May ECM move a Missile's Drive up as well as down (raising it past +4 makes it miss)? Is the
   allocation chosen with sight of the Missiles' orders only, or of the whole revealed order set? What tech level
   does a Missile have (its firing ship's)? §7.1.1 says the defender "adds or subtracts the difference"; the
   example subtracts the Missile's TL from the ship's: confirm the sign.

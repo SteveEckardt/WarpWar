@@ -13,9 +13,9 @@
 // { star, round, stage, hex, ... } with stage 'orders', 'hits', 'retreats' or 'withdraw'.
 
 import { loadMap, starAt, starById, isHex, isAdjacent, sameHex, onMap } from './map.js';
-import { ATTRIBUTES, createShip, shipCost, validateShip, techLevel } from './ships.js';
+import { ATTRIBUTES, attributesFor, createShip, shipCost, validateShip, techLevel } from './ships.js';
 import { validateMove, FIRST_TURN } from './movement.js';
-import { createHex, validateOrders, hitsOwed, checkHitAllocation, resolveRound } from './combat.js';
+import { createHex, validateOrders, hitsOwed, checkHitAllocation, resolveRound, needsEcm, checkEcm } from './combat.js';
 import { rearrange, withdrawSystemships } from './carrying.js';
 
 export const SIDES = ['A', 'B'];
@@ -49,7 +49,9 @@ const MISSILES_PER_BP = 3;
 // Fan rules a game may be created with (Phase 8, docs/rules/fan-modules.md). None by default.
 //   armor: Armor, A (fan §10.2.2, §7.5; D-042 to D-047), in any scenario (D-045).
 //   cannons: Cannons, C, and Shells, SH (fan §10.2.3, §10.2.4, §7.5; D-048 to D-051), in any scenario.
-export const MODULES = ['armor', 'cannons'];
+//   ecm: ECM, E (fan §7.1.1, §7.2; D-052 to D-054), Advanced only.
+export const MODULES = ['armor', 'cannons', 'ecm'];
+const MODULE_SCENARIOS = { ecm: ['advanced'] };
 
 // Fan §7.5, D-050: one BP resupplies up to 6 Shells, across ships.
 const SHELLS_PER_BP = 6;
@@ -90,6 +92,11 @@ export function createGame({ map, scenario, players, modules = [] }) {
   if (!(scenario in SCENARIOS)) throw new RangeError(`A scenario is learning, basic or advanced, not: ${scenario}`);
   if (!Array.isArray(modules) || modules.some((m) => !MODULES.includes(m)) || new Set(modules).size !== modules.length) {
     throw new RangeError(`Modules are a list drawn from ${MODULES.join(', ')}, not: ${JSON.stringify(modules)}`);
+  }
+  for (const m of modules) {
+    if (MODULE_SCENARIOS[m] && !MODULE_SCENARIOS[m].includes(scenario)) {
+      throw new RangeError(`The ${m} module is for Advanced only (D-054), not the ${scenario} scenario`);
+    }
   }
   if (!Array.isArray(players) || players.length !== 2 || players[0] === players[1]
     || !players.every((p) => typeof p === 'string' && p.length > 0)) {
@@ -333,8 +340,7 @@ function build(s, action) {
       if (attr === 'M') reject('BAD_REPAIR', `${id}: Missiles are resupplied, not repaired (§5.3)`);
       if (attr === 'SH') reject('BAD_REPAIR', `${id}: Shells are resupplied, not repaired (fan §7.5)`);
       const isArmor = attr === 'A' && s.modules.includes('armor');
-      const isCannon = attr === 'C' && s.modules.includes('cannons');
-      if (!ATTRIBUTES.includes(attr) && !isArmor && !isCannon) reject('BAD_REPAIR', `${id}: cannot repair ${attr}`);
+      if (!attributesFor(s.modules).includes(attr)) reject('BAD_REPAIR', `${id}: cannot repair ${attr}`);
       if (!Number.isInteger(n) || n < 1) reject('BAD_REPAIR', `${id}: repair ${attr} by a whole number of points, 1 or more`);
       if ((record[attr] ?? 0) + n > (record.built[attr] ?? 0)) {
         reject('OVER_BUILT', `${id}: ${attr} ${record[attr] ?? 0} + ${n} is more than the ${record.built[attr] ?? 0} it was built with (§5.3)`);
@@ -455,6 +461,8 @@ function chooseCombat(s, action) {
     owed: null,
     needHits: [],
     allocations: { A: null, B: null },
+    needEcm: [],
+    ecm: { A: null, B: null },
     retreating: {},
     end: null,
   };
@@ -482,7 +490,37 @@ function submitOrders(s, action) {
 // §7 step 2: orders revealed. Owners whose ships took effective hits must allocate them (§7.2.2).
 function afterOrders(s) {
   const c = s.combat;
-  const { owed } = hitsOwed(c.hex, allOrders(c));
+  // Fan §7.1.1: sides with ECM powered on a ship that Missiles were fired at spread it first.
+  c.needEcm = s.modules.includes('ecm') ? needsEcm(c.hex, allOrders(c)) : [];
+  if (c.needEcm.length > 0) c.stage = 'ecm';
+  else afterEcm(s);
+}
+
+const allEcm = (c) => ({ ...c.ecm?.A, ...c.ecm?.B });
+
+// Fan §7.1.1, D-052, D-053: after orders are revealed, each side with ECM to spread says, for each of its ships,
+// how many points go on each Missile fired at it and how far each Missile's Drive is moved.
+// ecm: { shipId: { 'firer:index': { points, shift } } }.
+function allocateEcm(s, action) {
+  expectStep(s, 'combat', 'ecm');
+  const side = sideOf(s, action.player);
+  const c = s.combat;
+  if (!c.needEcm.includes(side)) reject('NO_ECM_NEEDED', 'None of your ships has ECM to spread this round');
+  if (c.ecm[side]) reject('ALREADY_SUBMITTED', 'ECM for this round is already in');
+  if (!isObject(action.ecm)) reject('BAD_ECM', 'ECM maps each of your ships to its Missiles');
+  try {
+    checkEcm(c.hex, allOrders(c), side, action.ecm);
+  } catch (e) {
+    if (e instanceof RangeError) reject('BAD_ECM', e.message);
+    throw e;
+  }
+  c.ecm[side] = action.ecm;
+  if (c.needEcm.every((sd) => c.ecm[sd])) afterEcm(s);
+}
+
+function afterEcm(s) {
+  const c = s.combat;
+  const { owed } = hitsOwed(c.hex, allOrders(c), allEcm(c));
   c.owed = owed;
   c.needHits = SIDES.filter((side) => Object.entries(owed).some(([id, n]) => n > 0 && c.hex.ships[id].owner === side));
   if (c.needHits.length === 0) resolve(s);
@@ -509,7 +547,7 @@ function allocateHits(s, action) {
   }
   for (const [id, allocation] of Object.entries(allocations)) {
     try {
-      checkHitAllocation(c.hex, allOrders(c), id, allocation);
+      checkHitAllocation(c.hex, allOrders(c), id, allocation, allEcm(c));
     } catch (e) {
       if (e instanceof RangeError) reject('BAD_ALLOCATION', e.message);
       throw e;
@@ -528,13 +566,14 @@ function syncHex(s) {
 
 function resolve(s) {
   const c = s.combat;
-  const r = resolveRound(c.hex, allOrders(c), { ...c.allocations.A, ...c.allocations.B });
+  const r = resolveRound(c.hex, allOrders(c), { ...c.allocations.A, ...c.allocations.B }, allEcm(c));
   s.lastRound = {
     star: c.star,
     round: c.round,
     orders: allOrders(c), // §7 step 2: shown to both players
     ships: Object.fromEntries(Object.entries(c.hex.ships).map(([id, sh]) => [id, { owner: sh.owner, level: sh.level }])),
     quietRounds: r.hex.quietRounds,
+    ...(s.modules.includes('ecm') ? { ecm: allEcm(c) } : {}),
     shots: r.shots,
     damage: r.damage,
     destroyed: r.destroyed,
@@ -550,6 +589,8 @@ function resolve(s) {
   c.owed = null;
   c.needHits = [];
   c.allocations = { A: null, B: null };
+  c.needEcm = [];
+  c.ecm = { A: null, B: null };
   advanceCombat(s);
 }
 
@@ -679,6 +720,7 @@ const HANDLERS = {
   chooseCombat,
   orders: submitOrders,
   allocateHits,
+  allocateEcm,
   placeRetreats,
   withdraw,
   rearrange: rearrangeAction,

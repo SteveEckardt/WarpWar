@@ -5,7 +5,7 @@
 // effective hits on each ship. Where an owner takes hits is on their own record and is never shown to the enemy.
 
 import { SIDES, applyAction, previewDestination } from '../engine/game.js';
-import { validateOrders, hitsOwed, checkHitAllocation, QUIET_ROUNDS_TO_WITHDRAW } from '../engine/combat.js';
+import { validateOrders, hitsOwed, checkHitAllocation, checkEcm, incomingMissiles, QUIET_ROUNDS_TO_WITHDRAW } from '../engine/combat.js';
 import { ATTRIBUTES, attributesFor } from '../engine/ships.js';
 import { MISSILES_PER_HIT, hitsCapacity } from '../engine/damage.js';
 import { neighbors, onMap, starById } from '../engine/map.js';
@@ -22,7 +22,8 @@ const TACTIC_NAME = { attack: 'Attack', dodge: 'Dodge', retreat: 'Retreat' };
 export function orderText(id, ship, order) {
   const target = order.beamTarget != null ? displayId(order.beamTarget) : null;
   const verb = order.tactic === 'attack' && target ? `ATTACKS ${target}` : TACTIC_WORD[order.tactic] + (target ? `, Beam at ${target}` : '');
-  const keys = (order.C ?? 0) > 0 ? ['D', 'B', 'S', 'T', 'C'] : ['D', 'B', 'S', 'T'];
+  // Cannons and ECM appear only when powered, so classic orders read as the rulebook writes them.
+  const keys = ['D', 'B', 'S', 'T', ...['C', 'E'].filter((k) => (order[k] ?? 0) > 0)];
   const power = keys.map((k) => `${k}=${order[k] ?? 0}`).join(', ');
   const lines = [`${displayId(id)} (Level ${ship.level ?? 0}) ${verb}: ${power}.`];
   for (const m of order.missiles ?? []) lines.push(`M at ${displayId(m.target)}: D=${m.drive}.`);
@@ -88,7 +89,7 @@ function orderForm(state, id, ship, order, enemies) {
     out.push(`<label><input type="radio" name="tactic-${esc(id)}" value="${t}"${order.tactic === t ? ' checked' : ''}${off ? ' disabled' : ''}> ${TACTIC_NAME[t]}</label>`);
   }
   out.push(`</div>`);
-  out.push(`<div class="powers">${num('D', order.D, null, 'Drive')}${num('B', order.B, ship.B, 'Beam')}${num('S', order.S, ship.S, 'Screen')}${num('T', order.T, ship.T, 'Tubes')}</div>`);
+  out.push(`<div class="powers">${num('D', order.D, null, 'Drive')}${num('B', order.B, ship.B, 'Beam')}${num('S', order.S, ship.S, 'Screen')}${num('T', order.T, ship.T, 'Tubes')}${(ship.E ?? 0) > 0 ? num('E', order.E, ship.E, 'ECM') : ''}</div>`);
   const options = (selected) => enemies.map(([eid]) => `<option value="${esc(eid)}"${selected === eid ? ' selected' : ''}>${esc(displayId(eid))}</option>`).join('');
   if (ship.B > 0) {
     out.push(`<label class="target">Beam target <select name="beamTarget"><option value="">None</option>${options(order.beamTarget)}</select></label>`);
@@ -136,7 +137,7 @@ export function renderOrderCheck(state, side, orders) {
   out.push(`<ul class="power-used">`);
   for (const [id, ship] of ownShips(state, side)) {
     const o = orders[id] ?? {};
-    const used = ['D', 'B', 'S', 'T', 'C'].reduce((sum, k) => sum + (Number(o[k]) || 0), 0);
+    const used = ['D', 'B', 'S', 'T', 'C', 'E'].reduce((sum, k) => sum + (Number(o[k]) || 0), 0);
     out.push(`<li>${esc(displayId(id))}: power ${used} of ${ship.PD}</li>`);
   }
   out.push(`</ul>`);
@@ -167,13 +168,18 @@ function resultText(shot) {
 }
 
 // Every order, every shot with its CRT row, and the hits on each ship. orders: { id: order }; ships: { id: record }.
-function reportBody(state, ships, orders, shots, damage) {
+// fire: false shows the orders only (with ECM to come, the fire is read after it).
+function reportBody(state, ships, orders, shots, damage, { fire = true } = {}) {
   const out = [];
   out.push(`<h4>Orders</h4>`);
   for (const side of SIDES) {
     const ids = Object.keys(orders).filter((id) => ships[id]?.owner === side).sort();
     if (ids.length === 0) continue;
     out.push(`<p class="orders-text side-${side}"><strong>Side ${side} · ${esc(playerOf(state, side) ?? '')}</strong><br>${ids.map((id) => orderText(id, ships[id], orders[id]).map(esc).join('<br>')).join('<br>')}</p>`);
+  }
+  if (!fire) {
+    out.push(`<p class="hint">ECM is spread next (fan §7.1.1); the fire is read after it.</p>`);
+    return out.join('\n');
   }
   out.push(`<h4>Fire</h4>`);
   if (shots.length === 0) out.push(`<p class="hint">Nobody fired.</p>`);
@@ -189,8 +195,8 @@ function reportBody(state, ships, orders, shots, damage) {
       if (s.weapon === 'missile') {
         const i = missileIndex[s.from] ?? 0;
         missileIndex[s.from] = i + 1;
-        drive = from.missiles[i].drive;
-        weapon = 'Missile';
+        drive = from.missiles[i].drive + (s.ecm ?? 0);
+        weapon = s.ecm ? `Missile, ECM moved its Drive ${from.missiles[i].drive} to ${drive}` : 'Missile';
         tactic = 'attack';
       }
       const diff = drive - (to.D ?? 0);
@@ -229,13 +235,22 @@ export function pendingReport(state, seen) {
     }
   }
   const c = state.combat;
-  if (state.step === 'combat' && c?.stage === 'hits') {
+  if (state.step !== 'combat' || !c) return null;
+  const star = starById(state.map, c.star);
+  const orders = { ...c.orders.A, ...c.orders.B };
+  // With ECM to spread, the orders are shown first and the fire once ECM is in (fan §7.1.1).
+  if (c.stage === 'ecm') {
     const key = `orders:${c.star}:${c.round}`;
     if (seen.has(key)) return null;
-    const orders = { ...c.orders.A, ...c.orders.B };
-    const { shots, damage } = hitsOwed(c.hex, orders);
-    const star = starById(state.map, c.star);
-    return { key, html: [`<h3>Round ${c.round} at ${esc(star.name)}: orders revealed</h3>`, reportBody(state, c.hex.ships, orders, shots, damage)].join('\n') };
+    return { key, html: [`<h3>Round ${c.round} at ${esc(star.name)}: orders revealed</h3>`, reportBody(state, c.hex.ships, orders, [], {}, { fire: false })].join('\n') };
+  }
+  if (c.stage === 'hits') {
+    const afterEcm = (c.needEcm ?? []).length > 0;
+    const key = `${afterEcm ? 'fire' : 'orders'}:${c.star}:${c.round}`;
+    if (seen.has(key)) return null;
+    const { shots, damage } = hitsOwed(c.hex, orders, ecmOf(c));
+    const title = afterEcm ? 'the fire, after ECM' : 'orders revealed';
+    return { key, html: [`<h3>Round ${c.round} at ${esc(star.name)}: ${title}</h3>`, reportBody(state, c.hex.ships, orders, shots, damage)].join('\n') };
   }
   return null;
 }
@@ -251,6 +266,69 @@ function endText(end) {
 // --- hits (§7.2.2) ---
 
 const allOrders = (c) => ({ ...c.orders.A, ...c.orders.B });
+// Both sides' ECM this round (fan §7.1.1), keyed by defending ship.
+const ecmOf = (c) => ({ ...c.ecm?.A, ...c.ecm?.B });
+
+// --- ECM (fan §7.1.1, D-052, D-053) ---
+
+// A draft without the Missiles left untouched; a Drive change without points stays, for the engine to refuse.
+export function cleanEcm(draft = {}) {
+  const out = {};
+  for (const [id, byRef] of Object.entries(draft)) {
+    const kept = Object.fromEntries(Object.entries(byRef ?? {})
+      .filter(([, e]) => (e.points ?? 0) !== 0 || (e.shift ?? 0) !== 0)
+      .map(([ref, e]) => [ref, { points: e.points ?? 0, shift: e.shift ?? 0 }]));
+    if (Object.keys(kept).length > 0) out[id] = kept;
+  }
+  return out;
+}
+
+// The side's ships that powered ECM and have Missiles fired at them: [{ id, ship, powered, incoming }].
+function ecmShips(state, side) {
+  const c = state.combat;
+  const orders = allOrders(c);
+  return ownShips(state, side)
+    .map(([id, ship]) => ({ id, ship, powered: orders[id]?.E ?? 0, incoming: incomingMissiles(c.hex, orders, id) }))
+    .filter((e) => e.powered > 0 && e.incoming.length > 0);
+}
+
+export function renderEcmCheck(state, side, draft) {
+  const c = state.combat;
+  let problem = null;
+  try {
+    checkEcm(c.hex, allOrders(c), side, cleanEcm(draft));
+  } catch (e) {
+    if (!(e instanceof RangeError)) throw e;
+    // A Missile is named 'firer:index' in the engine; here, by its firing ship and number.
+    problem = plainIds(e.message.replace(/\b([AB]-[WS]\d+):(\d+)\b/g, (_, ship, i) => `${ship}'s Missile ${Number(i) + 1}`));
+  }
+  const out = [];
+  if (problem) out.push(`<ul class="problems"><li>${esc(problem)}</li></ul>`);
+  out.push(`<button type="button" class="primary" data-action="submit-ecm"${problem ? ' disabled' : ''}>Use this ECM</button>`);
+  return out.join('\n');
+}
+
+// draft: { shipId: { ref: { points, shift } } } as typed so far.
+export function renderEcm(state, player, draft) {
+  const side = state.sides[player];
+  const c = state.combat;
+  const out = [header(state)];
+  out.push(`<p>${esc(player)}, spread your ECM over the Missiles fired at your ships. Each working point moves a Missile's Drive by 1, up or down; working points are the points you put on it plus your ship's tech level less the Missile's (D-052, D-053). A Missile's Drive never goes below 1.</p>`);
+  out.push(`<form class="ecm-form" autocomplete="off">`);
+  for (const { id, ship, powered, incoming } of ecmShips(state, side)) {
+    out.push(`<fieldset class="ecm" data-ship="${esc(id)}"><legend>${esc(displayId(id))} · ${powered} ECM powered · Level ${ship.level ?? 0}</legend>`);
+    for (const m of incoming) {
+      const now = draft[id]?.[m.ref] ?? {};
+      out.push(`<div class="missile-ecm" data-ref="${esc(m.ref)}"><span>Missile from ${tag(state, c.hex.ships[m.from].owner, m.from)}, Drive ${m.drive}, Level ${m.level}</span>`);
+      out.push(`<label><span>ECM points</span><input type="number" name="points" min="0" max="${powered}" step="1" value="${now.points ?? 0}" inputmode="numeric"></label>`);
+      out.push(`<label><span>Drive change</span><input type="number" name="shift" step="1" value="${now.shift ?? 0}"></label></div>`);
+    }
+    out.push(`</fieldset>`);
+  }
+  out.push(`</form>`);
+  out.push(`<div id="ecm-check">${renderEcmCheck(state, side, draft)}</div>`);
+  return out.join('\n');
+}
 
 // The ships of a side that must take hits this round, with how many: [{ id, owed, ship }]. Private to the owner.
 export function hitsToTake(state, side) {
@@ -270,7 +348,7 @@ export function hitsToTake(state, side) {
 // D-042: what each of the side's ships' Armor takes this round, before the owner places the rest.
 function armorShares(state, side) {
   const c = state.combat;
-  const { damage } = hitsOwed(c.hex, allOrders(c));
+  const { damage } = hitsOwed(c.hex, allOrders(c), ecmOf(c));
   return Object.fromEntries(Object.entries(damage).filter(([id, d]) => d.armor > 0 && c.hex.ships[id].owner === side).map(([id, d]) => [id, d.armor]));
 }
 
@@ -280,7 +358,7 @@ export function hitProblems(state, side, allocations) {
   const problems = [];
   for (const { id } of hitsToTake(state, side)) {
     try {
-      checkHitAllocation(c.hex, allOrders(c), id, allocations[id] ?? {});
+      checkHitAllocation(c.hex, allOrders(c), id, allocations[id] ?? {}, ecmOf(c));
     } catch (e) {
       if (!(e instanceof RangeError)) throw e;
       problems.push({ ship: id, message: plainIds(e.message) });

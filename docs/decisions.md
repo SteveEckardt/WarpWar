@@ -565,3 +565,43 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
   classic scenarios, with Shell resupply only where repair and resupply are used (Advanced)?
 - **Ruling (2026-10-01):** Same as Armor (D-045): an option a game is created with, off by default, in any of the three classic
   scenarios. Shell resupply only where repair and resupply are used (Advanced).
+
+## K. Fan module: ECM (docs/rules/fan-extended.md)
+
+### D-052 — What an ECM point does to a Missile
+- **Status:** RESOLVED
+- **Where:** fan §7.1.1; fan §5.4; fan §5.2.3
+- **Text:** "after orders are revealed, the player using ECM allocates his ECM points among the attacking
+  Missiles" / "resulting in 1 effective ECM point. The player using ECM chooses to lower the Missile's Drive setting
+  to 2. This causes the Missile to get a drive difference of -1 and to use the ATTACK (-1,-2) row" / "A Missile may
+  be given any Drive setting of +1 or greater"
+- **Question:** Does each effective ECM point move the Missile's Drive setting by 1, in a direction the defender
+  chooses (up as well as down, so a Missile can be pushed into a missing row such as +5 or more), or only down? May
+  the defender use fewer points than it put on a Missile? Can ECM take a Missile's Drive below 1?
+- **Ruling (2026-10-01):** Raise or lower, never below 1. Each working ECM point moves that Missile's Drive setting by 1, up or
+  down as the defender chooses for each Missile (raising it into a missing row such as +5 or more is allowed). The
+  defender need not use every working point. A Missile's Drive never goes below 1.
+
+### D-053 — The tech-level adjustment to ECM
+- **Status:** RESOLVED
+- **Where:** fan §7.1.1; fan §7.2; fan §5.5.1
+- **Text:** "adds or subtracts the difference between the defending ship's tech level and each Missile's tech level
+  from the ECM points allocated to that Missile ONLY" / "The tech level of each Missile is then subtracted from the
+  tech level of the target ship, and the difference is added to or subtracted from the ECM points" / "the Missile's
+  tech level of 1 is subtracted from W4's tech level of 0 for an ECM modifier of -1, rendering W4's ECM ineffective"
+- **Question:** The modifier is (target ship's TL − Missile's TL), added to the points on that Missile, never below
+  0: confirm. Is a Missile's tech level its firing ship's? Does a positive modifier apply to a Missile given no ECM
+  points (free ECM against older Missiles), or only to Missiles given at least one point?
+- **Ruling (2026-10-01):** Only Missiles given ECM. A Missile's tech level is its firing ship's. The modifier, target ship's TL
+  minus the Missile's TL, is added to the points put on that Missile, never below 0; a Missile given no ECM points
+  is unaffected.
+
+### D-054 — Which games may use ECM
+- **Status:** RESOLVED
+- **Where:** fan §7, §7.1.1; D-045; D-051
+- **Text:** "The following advanced rules override any of the basic rules." / "In addition to basic building
+  attributes the following building attributes can be built; 7.1.1 Electronic Countermeasures"
+- **Question:** As with Armor and Cannons: an option a game is created with, off by default, in any of the three
+  classic scenarios? Outside Advanced every ship is Level 0 (D-011), so the tech-level adjustment is always 0 there.
+- **Ruling (2026-10-01):** Advanced only. ECM is an option an Advanced game is created with, off by default;
+  Learning and Basic games cannot use it.

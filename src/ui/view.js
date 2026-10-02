@@ -18,6 +18,7 @@ export function actor(state) {
     const order = [state.active, state.active === 'A' ? 'B' : 'A'];
     let side = state.active;
     if (c.stage === 'orders') side = order.find((sd) => !c.orders[sd]);
+    else if (c.stage === 'ecm') side = order.find((sd) => c.needEcm.includes(sd) && !c.ecm[sd]);
     else if (c.stage === 'hits') side = order.find((sd) => c.needHits.includes(sd) && !c.allocations[sd]);
     else if (c.stage === 'retreats') side = order.find((sd) => Object.values(c.retreating).some((sh) => sh.owner === sd));
     return side ? playerOf(state, side) : null;

@@ -149,6 +149,12 @@ label.scenario { display: flex; gap: 6px; align-items: baseline; margin: 4px 0; 
 fieldset.repair { margin: 8px 0; }
 fieldset.repair legend { font-size: 12px; color: var(--muted); }
 
+/* Phase 8d: ECM */
+.missile-ecm { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; align-items: end; margin: 6px 0; }
+.missile-ecm > span { grid-column: 1 / -1; }
+.missile-ecm label { display: grid; gap: 2px; margin: 0; font-size: 12px; color: var(--muted); }
+.missile-ecm input { width: 100%; }
+
 /* Phase 7e: game log and the end of the game */
 .game-log { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
 .game-log summary { cursor: pointer; color: var(--muted); }

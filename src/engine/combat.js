@@ -8,7 +8,7 @@ import { carriedIds, freeRacks, cargoLost } from './carrying.js';
 
 export const QUIET_ROUNDS_TO_WITHDRAW = 3;
 
-const ORDER_KEYS = ['tactic', 'D', 'B', 'S', 'T', 'C', 'beamTarget', 'missiles', 'cannonTarget', 'shells', 'pickup', 'drop'];
+const ORDER_KEYS = ['tactic', 'D', 'B', 'S', 'T', 'C', 'E', 'beamTarget', 'missiles', 'cannonTarget', 'shells', 'pickup', 'drop'];
 // Fan §10.2.3: each Cannon fires 1 to 3 Shells a round.
 const MAX_SHELLS_PER_CANNON = 3;
 const MISS = { result: 'miss', bonus: 0 };
@@ -45,7 +45,7 @@ export function validateOrder(ship, order) {
   } else if (order.tactic === 'retreat' && !ship.WG) {
     error('SYSTEMSHIP_RETREAT', 'Systemships may not select the Retreat tactic');
   }
-  for (const key of ['D', 'B', 'S', 'T', 'C']) {
+  for (const key of ['D', 'B', 'S', 'T', 'C', 'E']) {
     const v = power(order, key);
     if (!Number.isInteger(v) || v < 0) error('BAD_VALUE', `${key} must be a non-negative integer`);
   }
@@ -61,10 +61,12 @@ export function validateOrder(ship, order) {
   }
   if (errors.length > 0) return errors;
 
-  const { D, B, S, T, C } = Object.fromEntries(['D', 'B', 'S', 'T', 'C'].map((k) => [k, power(order, k)]));
-  if (D + B + S + T + C > ship.PD) {
-    error('OVER_PD', `Allocated ${D + B + S + T + C} power but PD is ${ship.PD}`);
+  const { D, B, S, T, C, E } = Object.fromEntries(['D', 'B', 'S', 'T', 'C', 'E'].map((k) => [k, power(order, k)]));
+  if (D + B + S + T + C + E > ship.PD) {
+    error('OVER_PD', `Allocated ${D + B + S + T + C + E} power but PD is ${ship.PD}`);
   }
+  // Fan §7.1.1, §5.2: ECM is powered up to the ECM built, alongside any other system.
+  if (E > (ship.E ?? 0)) error('OVER_ECM', `ECM powered at ${E} but built to ${ship.E ?? 0}`);
   if (B > ship.B) error('OVER_BEAM', `Beam powered at ${B} but built to ${ship.B}`);
   if (S > ship.S) error('OVER_SCREEN', `Screen powered at ${S} but built to ${ship.S}`);
   if (T > ship.T) error('OVER_TUBES', `${T} Tubes powered but ship has ${ship.T}`);
@@ -201,7 +203,61 @@ function endReason(hows) {
 }
 
 // Validates the orders and reads every weapon off the CRT. Returns { ids, afterFiring, shots, damage }.
-function prepareRound(hex, orders) {
+// --- ECM (fan §7.1.1, §7.2; D-052, D-053) ---
+
+// The Missiles fired at a ship this round: [{ ref: 'firer:index', from, drive, level }]. A Missile's tech level is
+// its firing ship's (D-053).
+export function incomingMissiles(hex, orders, id) {
+  const out = [];
+  for (const [from, order] of Object.entries(orders)) {
+    for (const [i, m] of missilesOf(order ?? {}).entries()) {
+      if (m?.target === id) out.push({ ref: `${from}:${i}`, from, drive: m.drive, level: hex.ships[from]?.level ?? 0 });
+    }
+  }
+  return out;
+}
+
+// The sides, A before B, with a ship that powered ECM and has Missiles fired at it.
+export function needsEcm(hex, orders) {
+  const sides = new Set();
+  for (const [id, ship] of Object.entries(hex.ships)) {
+    if (power(orders[id] ?? {}, 'E') > 0 && incomingMissiles(hex, orders, id).length > 0) sides.add(ship.owner);
+  }
+  return ['A', 'B'].filter((sd) => sides.has(sd));
+}
+
+const ecmShift = (ecm, target, ref) => ecm?.[target]?.[ref]?.shift ?? 0;
+
+// Checks one side's ECM. ecm: { shipId: { ref: { points, shift } } }. Throws RangeError.
+// Points on a ship's Missiles total no more than the ECM it powered; a Missile's working points are its points
+// plus (ship TL − Missile TL), never below 0 (D-053); its Drive moves by no more than that, up or down, and never
+// below 1 (D-052).
+export function checkEcm(hex, orders, side, ecm) {
+  const plural = (n) => `${n} working point${n === 1 ? '' : 's'}`;
+  for (const [id, byMissile] of Object.entries(ecm)) {
+    const ship = hex.ships[id];
+    if (!ship || ship.owner !== side) throw new RangeError(`${id} is not yours`);
+    const powered = power(orders[id] ?? {}, 'E');
+    const incoming = incomingMissiles(hex, orders, id);
+    let used = 0;
+    for (const [ref, entry] of Object.entries(byMissile ?? {})) {
+      const missile = incoming.find((m) => m.ref === ref);
+      if (!missile) throw new RangeError(`${ref} is not a Missile fired at ${id}`);
+      const { points, shift } = entry ?? {};
+      if (!Number.isInteger(points) || points < 1) throw new RangeError(`${id}: ECM on ${ref} takes a whole number of points, 1 or more`);
+      if (!Number.isInteger(shift)) throw new RangeError(`${id}: the Drive change on ${ref} is a whole number`);
+      const working = Math.max(0, points + ship.level - missile.level);
+      if (Math.abs(shift) > working) {
+        throw new RangeError(`${id}: ${points} points on ${ref} give ${plural(working)} (D-053); it cannot move the Missile ${Math.abs(shift)}`);
+      }
+      if (missile.drive + shift < 1) throw new RangeError(`${id}: a Missile's Drive cannot go below 1 (D-052)`);
+      used += points;
+    }
+    if (used > powered) throw new RangeError(`${id}: ${used} ECM points but ${powered} powered`);
+  }
+}
+
+function prepareRound(hex, orders, ecm = {}) {
   const errors = validateOrders(hex, orders);
   if (errors.length > 0) {
     throw new Error(errors.map((e) => `${e.ship}: ${e.code}: ${e.message}`).join('; '));
@@ -221,17 +277,21 @@ function prepareRound(hex, orders) {
   for (const id of ids) {
     const order = orders[id];
     const firer = hex.ships[id];
-    const fire = (to, weapon, row, drive) => {
+    const fire = (to, weapon, row, drive, shift = 0) => {
       const cell = lookupCRT(row, orders[to].tactic, drive - power(orders[to], 'D'));
       // D-025: a Missile's Escapes is a Miss. A Beam's Escapes does no damage either.
       const damage = hitDamage(weapon, firer.level, cell.result === 'escapes' ? MISS : cell);
       if (weapon.type === 'shells') shots.push({ from: id, to, weapon: 'cannon', shells: weapon.count, result: cell.result, bonus: cell.bonus, damage });
-      else shots.push({ from: id, to, weapon: weapon.type, result: cell.result, bonus: cell.bonus, damage });
+      else shots.push({ from: id, to, weapon: weapon.type, result: cell.result, bonus: cell.bonus, damage, ...(shift ? { ecm: shift } : {}) });
     };
     if (order.beamTarget != null) {
       fire(order.beamTarget, { type: 'beam', power: order.B }, order.tactic, power(order, 'D'));
     }
-    for (const m of missilesOf(order)) fire(m.target, { type: 'missile' }, 'attack', m.drive);
+    // D-052: a Missile flies at its written Drive moved by the target's ECM, if any.
+    for (const [i, m] of missilesOf(order).entries()) {
+      const shift = ecmShift(ecm, m.target, `${id}:${i}`);
+      fire(m.target, { type: 'missile' }, 'attack', m.drive + shift, shift);
+    }
     // Fan §5.4, D-048: each Cannon's burst is read like Beam fire, on the ship's own tactic and Drive.
     if (order.cannonTarget != null) {
       for (const n of shellsOf(order)) fire(order.cannonTarget, { type: 'shells', count: n }, order.tactic, power(order, 'D'));
@@ -297,16 +357,16 @@ function takeHits(hex, orders, afterFiring, id, damage, hitAllocation = {}) {
 
 // A round's shots and damage, and the hits each ship's owner must allocate (§7 step 2, §7.2.2), before any
 // allocation is made. Returns { shots, damage, owed: { id: hits } }. Throws if the orders are illegal.
-export function hitsOwed(hex, orders) {
-  const { ids, afterFiring, shots, damage } = prepareRound(hex, orders);
+export function hitsOwed(hex, orders, ecm = {}) {
+  const { ids, afterFiring, shots, damage } = prepareRound(hex, orders, ecm);
   const owed = Object.fromEntries(ids.map((id) => [id, hitLimits(hex, orders, afterFiring, id, toPlace(damage[id])).owed]));
   return { shots, damage, owed };
 }
 
 // Checks one ship's hit allocation on its own, exactly as resolveRound will. Throws RangeError.
-export function checkHitAllocation(hex, orders, id, allocation) {
+export function checkHitAllocation(hex, orders, id, allocation, ecm = {}) {
   if (!(id in hex.ships)) throw new RangeError(`Hit allocation for unknown ship: ${id}`);
-  const { afterFiring, damage } = prepareRound(hex, orders);
+  const { afterFiring, damage } = prepareRound(hex, orders, ecm);
   takeHits(hex, orders, afterFiring, id, damage[id], allocation);
 }
 
@@ -319,8 +379,8 @@ export function checkHitAllocation(hex, orders, id, allocation) {
 // `escaped` maps id to the ship's damaged record, Systemships aboard included (the caller places it;
 // no destination is chosen here).
 // `end` is null while both sides still have ships, otherwise { reason } (plus `owners` when a side is eliminated).
-export function resolveRound(hex, orders, hitAllocations = {}) {
-  const { ids, afterFiring, shots, damage } = prepareRound(hex, orders);
+export function resolveRound(hex, orders, hitAllocations = {}, ecm = {}) {
+  const { ids, afterFiring, shots, damage } = prepareRound(hex, orders, ecm);
   for (const id of Object.keys(hitAllocations)) {
     if (!(id in hex.ships)) throw new RangeError(`Hit allocation for unknown ship: ${id}`);
   }

@@ -10,7 +10,7 @@ import { displayId, plainIds } from './view.js';
 
 export const EMPTY_DESIGN = Object.freeze({ WG: true, PD: 0, B: 0, S: 0, T: 0, M: 0, SR: 0 });
 
-const LABELS = { PD: 'Power/Drive', B: 'Beam', S: 'Screen', T: 'Tubes', M: 'Missiles', SR: 'Systemship Racks', A: 'Armor', C: 'Cannons', SH: 'Shells' };
+const LABELS = { PD: 'Power/Drive', B: 'Beam', S: 'Screen', T: 'Tubes', M: 'Missiles', SR: 'Systemship Racks', A: 'Armor', C: 'Cannons', SH: 'Shells', E: 'ECM' };
 const SHELLS_PER_BP = 6; // fan §7.5, D-050; for showing the cost
 const MISSILES_PER_BP = 3; // for showing the cost; the engine charges it
 const ARMOR_REPAIR_PER_BP = 2; // fan §7.5, D-044; likewise

@@ -13,7 +13,7 @@ import { renderMovement, planInfo } from './movement.js';
 import { renderRearrange, currentLoads, rearrangeActionAt } from './rearrange.js';
 import {
   renderChoose, renderOrders, renderOrderCheck, blankOrders, pendingReport, renderHits, renderHitCheck,
-  renderPlacement, placementShips, placementTargets, withdrawAction,
+  renderPlacement, placementShips, placementTargets, withdrawAction, renderEcm, renderEcmCheck, cleanEcm,
 } from './combat.js';
 import { logEntries, renderLog } from './log.js';
 import { renderGameOver } from './gameover.js';
@@ -68,6 +68,7 @@ function syncDrafts() {
   ui.dest = {};
   ui.placing = null;
   ui.pickups = {};
+  ui.ecmDraft = {};
   if (!c || !ui.viewer) return;
   const side = g.sides[ui.viewer];
   if (c.stage === 'orders') ui.orders = blankOrders(g, side);
@@ -92,6 +93,7 @@ function actionsHtml() {
     const c = g.combat;
     if (!c) return renderChoose(g) + errorHtml();
     if (c.stage === 'orders') return renderOrders(g, ui.viewer, ui.orders) + errorHtml();
+    if (c.stage === 'ecm') return renderEcm(g, ui.viewer, ui.ecmDraft) + errorHtml();
     if (c.stage === 'hits') return renderHits(g, ui.viewer, ui.allocations) + errorHtml();
     return renderPlacement(g, ui.viewer, ui.dest, ui.placing, ui.pickups) + errorHtml();
   }
@@ -181,6 +183,8 @@ function readOrders(form) {
   for (const set of form.querySelectorAll('fieldset[data-ship]')) {
     const order = { tactic: set.querySelector('input[type="radio"]:checked')?.value ?? 'attack' };
     for (const k of ['D', 'B', 'S', 'T']) order[k] = count(set.querySelector(`.powers input[name="${k}"]`));
+    const ecmPower = set.querySelector('.powers input[name="E"]');
+    if (ecmPower) order.E = count(ecmPower);
     const beam = set.querySelector('select[name="beamTarget"]');
     if (beam) order.beamTarget = beam.value || null;
     const missiles = [...set.querySelectorAll('.missile')].map((row) => ({
@@ -345,6 +349,9 @@ const handlers = {
   'submit-orders'() {
     act({ type: 'orders', player: ui.viewer, orders: cleanOrders(ui.orders) });
   },
+  'submit-ecm'() {
+    act({ type: 'allocateEcm', player: ui.viewer, ecm: cleanEcm(ui.ecmDraft) });
+  },
   'submit-hits'() {
     act({ type: 'allocateHits', player: ui.viewer, allocations: ui.allocations });
   },
@@ -438,6 +445,19 @@ document.addEventListener('input', (e) => {
   if (pickups) {
     ui.pickups = Object.fromEntries([...pickups.querySelectorAll('select')].map((s) => [s.name, s.value || null]));
     render();
+    return;
+  }
+  const ecm = e.target.closest('form.ecm-form');
+  if (ecm) {
+    ui.ecmDraft = {};
+    for (const set of ecm.querySelectorAll('fieldset[data-ship]')) {
+      for (const row of set.querySelectorAll('[data-ref]')) {
+        const points = count(row.querySelector('input[name="points"]'));
+        const shift = Number(row.querySelector('input[name="shift"]').value) || 0;
+        ui.ecmDraft[set.dataset.ship] = { ...(ui.ecmDraft[set.dataset.ship] ?? {}), [row.dataset.ref]: { points, shift } };
+      }
+    }
+    $('ecm-check').innerHTML = renderEcmCheck(ui.game, ui.game.sides[ui.viewer], ui.ecmDraft);
     return;
   }
   const hits = e.target.closest('form.hits');

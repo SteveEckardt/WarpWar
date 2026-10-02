@@ -1,6 +1,6 @@
 # Roadmap
 
-Current phase: 8c
+Current phase: 8d
 
 0. Rules extraction: PDF to docs/rules/classic.md, ambiguities logged
 1. Ship building: attributes, BP costs, validation
@@ -32,4 +32,5 @@ Current phase: 8c
     rules in docs/rules/fan-modules.md; no code. Open questions are logged per module when the owner picks it
 8b. Armor (fan §10.2.2, §7.5): the first module; sets how modules are switched on for a game
 8c. Cannons and Shells (fan §10.2.3, §10.2.4, §5.3.1, §7.5)
-8d+. One slice per further module the owner picks, in the order chosen
+8d. ECM (fan §7.1.1, §7.2, §5.6): a new step in the combat round to spread ECM over incoming Missiles
+8e+. One slice per further module the owner picks, in the order chosen

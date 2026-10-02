@@ -2,7 +2,8 @@
 // Rules: docs/rules/classic.md §4.1-4.3, §5.1, §5.2. Rulings: docs/decisions.md.
 // Optional modules (fan rules, Phase 8): `modules` lists those a game was created with. With 'armor', ships may
 // carry Armor, A (fan §10.2.2, D-042 to D-047). With 'cannons', Cannons, C, and Shells, SH (fan §10.2.3,
-// §10.2.4, D-048 to D-051). A record has these only if the ship was built with them.
+// §10.2.4, D-048 to D-051). With 'ecm' (Advanced only), ECM, E (fan §7.1.1, D-052 to D-054). A record has these
+// only if the ship was built with them.
 
 export const SCENARIOS = ['learning', 'basic', 'advanced'];
 
@@ -17,7 +18,7 @@ const ARMOR_PER_BP_BASE = 2;
 export const SHELLS_PER_BP = 6;
 
 // The module attributes, in record order; a record holds them only when built with them.
-export const OPTIONAL_ATTRIBUTES = ['C', 'SH', ARMOR];
+export const OPTIONAL_ATTRIBUTES = ['C', 'SH', 'E', ARMOR];
 
 export const WARP_GENERATOR_COST = 5;
 
@@ -35,6 +36,7 @@ function value(design, attr) {
 export const attributesFor = (modules = []) => [
   ...ATTRIBUTES,
   ...(modules.includes('cannons') ? ['C', 'SH'] : []),
+  ...(modules.includes('ecm') ? ['E'] : []),
   ...(modules.includes('armor') ? [ARMOR] : []),
 ];
 
@@ -44,7 +46,7 @@ export function shipCost(design, level = 0) {
   const missiles = Math.ceil(value(design, 'M') / 3);
   const armor = Math.ceil(value(design, ARMOR) / (ARMOR_PER_BP_BASE + level));
   const shells = Math.ceil(value(design, 'SH') / SHELLS_PER_BP);
-  const units = ['PD', 'B', 'S', 'T', 'SR', 'C'].reduce((sum, attr) => sum + value(design, attr), 0);
+  const units = ['PD', 'B', 'S', 'T', 'SR', 'C', 'E'].reduce((sum, attr) => sum + value(design, attr), 0);
   return units + missiles + armor + shells + (design.WG ? WARP_GENERATOR_COST : 0);
 }
 
