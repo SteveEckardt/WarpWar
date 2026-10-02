@@ -257,8 +257,9 @@ export function checkEcm(hex, orders, side, ecm) {
   }
 }
 
-function prepareRound(hex, orders, ecm = {}) {
-  const errors = validateOrders(hex, orders);
+// checked: the orders were validated when they were written, so they are not checked again.
+function prepareRound(hex, orders, ecm = {}, { checked = false } = {}) {
+  const errors = checked ? [] : validateOrders(hex, orders);
   if (errors.length > 0) {
     throw new Error(errors.map((e) => `${e.ship}: ${e.code}: ${e.message}`).join('; '));
   }
@@ -364,9 +365,11 @@ export function hitsOwed(hex, orders, ecm = {}) {
 }
 
 // Checks one ship's hit allocation on its own, exactly as resolveRound will. Throws RangeError.
+// The orders are those already accepted this round, so they are not validated again: a side's view of the hex
+// (D-039) holds only counters for enemy ships, and the hits on its own ship need nothing more.
 export function checkHitAllocation(hex, orders, id, allocation, ecm = {}) {
   if (!(id in hex.ships)) throw new RangeError(`Hit allocation for unknown ship: ${id}`);
-  const { afterFiring, damage } = prepareRound(hex, orders, ecm);
+  const { afterFiring, damage } = prepareRound(hex, orders, ecm, { checked: true });
   takeHits(hex, orders, afterFiring, id, damage[id], allocation);
 }
 

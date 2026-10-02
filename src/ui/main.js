@@ -241,10 +241,6 @@ function startGame(form) {
   const modules = data.getAll('module').map(String);
   const seats = [String(data.get('seat1') ?? 'local'), String(data.get('seat2') ?? 'local')];
   ui.setup = { player1: players[0], player2: players[1], seats, first, scenario, modules };
-  if (seats.includes('computer') && scenario !== 'learning') {
-    ui.setup.error = 'The computer plays the Learning scenario only, for now.';
-    return;
-  }
   let created;
   try {
     created = createGame({ map: ui.mapData, scenario, players, modules });
