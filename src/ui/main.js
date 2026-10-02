@@ -15,7 +15,8 @@ import { createGameLoop } from '../play/loop.js';
 import { starAt } from '../engine/map.js';
 import { renderMap, esc } from './hexmap.js';
 import { renderHexPanel, renderStatus } from './panel.js';
-import { renderNewGame, renderChooseSide } from './setup.js';
+import { renderNewGame, renderChooseSide, parseSeed, computerSeed } from './setup.js';
+import { createPacer, renderPace } from './pace.js';
 import { EMPTY_DESIGN, nextShipId, buildAction, buildCheck, renderBuilder, renderBuildCheck, renderDesignSummary } from './builder.js';
 import { renderMovement, planInfo } from './movement.js';
 import { renderRearrange, currentLoads, rearrangeActionAt } from './rearrange.js';
@@ -33,6 +34,7 @@ const mapEl = $('map');
 const panelEl = $('panel');
 const statusEl = $('status');
 const handoffEl = $('handoff');
+const paceEl = $('pace');
 const mainEl = document.querySelector('main');
 
 // The shared screen's copy of the game: set up here, then changed only by the loop.
@@ -40,14 +42,16 @@ let game = null;
 let loop = null;
 let controllers = null; // { [player]: controller }
 
-// The pause before each computer action, so a human can follow it.
-const COMPUTER_DELAY_MS = 700;
+// The pause before each computer action (Phase 9b-4): speed, Pause, Step. One per game; the speed carries over.
+let pacer = createPacer();
 
 const ui = {
   mapData: null,
   preview: null, // an empty Learning game, for showing the map before setup
   viewer: null, // the player who last said they are at the screen
   solo: null, // the only local player, against the computer
+  seed: null, // the game's seed, when a computer plays (Phase 9b-4)
+  paceKey: null, // what the pace bar last showed
   selected: null, // the hex { q, r } whose ships the panel shows
   plan: null, // the move being planned: { ship, steps }
   setup: {},
@@ -134,7 +138,7 @@ function actionsHtml() {
     if (c.stage === 'hits') return renderHits(g, ui.viewer, ui.allocations) + errorHtml();
     return renderPlacement(g, ui.viewer, ui.dest, ui.placing, ui.pickups) + errorHtml();
   }
-  if (g.step === 'over') return renderGameOver(g, ui.log);
+  if (g.step === 'over') return renderGameOver(g, ui.log, { seed: ui.seed });
   if (g.step === 'rearrange') return renderRearrange(g, ui.viewer, ui.rearrange, ui.error);
   return '';
 }
@@ -146,6 +150,9 @@ function render() {
   let state = ui.preview;
   if (game) state = hide ? viewFor(game, null) : view();
   statusEl.innerHTML = game ? renderStatus(game) : 'Set up a new game';
+  renderPaceBar();
+  // Nobody human playing: the computers wait while a round report is open, so it is read before play goes on.
+  pacer.hold(report != null && kindsOf().every((k) => k === 'computer'));
   if (!hide) syncDrafts();
   let plan = null;
   if (!hide && ui.plan) plan = planInfo(state, ui.plan.ship, ui.plan.steps);
@@ -193,21 +200,36 @@ async function act(action) {
   return true;
 }
 
-// The computer (the planner, Phase 9b-3), pausing before each action so a human can follow it.
-function pacedComputer() {
-  const computer = createController('computer', { seed: Math.floor(Math.random() * 2 ** 31), strategy: 'plan' });
+const kindsOf = () => Object.values(controllers ?? {}).map((c) => c.kind);
+
+// The pace bar, while a computer plays and the game is on; redrawn only when it changes, so its menu stays open.
+function renderPaceBar() {
+  const on = game != null && game.step !== 'over' && kindsOf().includes('computer');
+  const key = on ? `${pacer.speed}:${pacer.paused}:${ui.seed}` : null;
+  paceEl.hidden = !on;
+  if (key === ui.paceKey) return;
+  ui.paceKey = key;
+  paceEl.innerHTML = on ? renderPace({ speed: pacer.speed, paused: pacer.paused, seed: ui.seed }) : '';
+}
+
+// The computer at a strength (setup.js SEATS: 'plan' or 'random'), pausing before each action so a human can
+// follow it.
+function pacedComputer(strategy, seed) {
+  const computer = createController('computer', { seed, strategy });
   return {
     kind: computer.kind,
     async nextAction(v, options) {
-      await new Promise((done) => setTimeout(done, COMPUTER_DELAY_MS));
+      await pacer.wait();
       return computer.nextAction(v, options);
     },
   };
 }
 
-// Hands the game to the loop once the first player is set. seats: { [player]: 'local' | 'computer' }.
+// Hands the game to the loop once the first player is set. seats: { [player]: 'local' | 'plan' | 'random' }, in
+// player order; each computer's seed comes from the game's (ui.seed).
 function startLoop(seats) {
-  controllers = Object.fromEntries(Object.entries(seats).map(([player, kind]) => [player, kind === 'computer' ? pacedComputer() : createController(kind)]));
+  controllers = Object.fromEntries(Object.entries(seats).map(([player, seat], i) => [player,
+    seat === 'local' ? createController('local') : pacedComputer(seat, computerSeed(ui.seed, i))]));
   const locals = Object.keys(seats).filter((p) => seats[p] === 'local');
   ui.solo = locals.length === 1 ? locals[0] : null;
   ui.viewer = ui.solo;
@@ -240,7 +262,13 @@ function startGame(form) {
   const scenario = String(data.get('scenario') ?? 'learning');
   const modules = data.getAll('module').map(String);
   const seats = [String(data.get('seat1') ?? 'local'), String(data.get('seat2') ?? 'local')];
-  ui.setup = { player1: players[0], player2: players[1], seats, first, scenario, modules };
+  const seedText = String(data.get('seed') ?? '');
+  ui.setup = { player1: players[0], player2: players[1], seats, seed: seedText, first, scenario, modules };
+  const { seed, error } = parseSeed(seedText);
+  if (error) {
+    ui.setup.error = error;
+    return;
+  }
   let created;
   try {
     created = createGame({ map: ui.mapData, scenario, players, modules });
@@ -257,6 +285,9 @@ function startGame(form) {
   }
   ui.log = logEntries(created, action, r.state);
   game = r.state;
+  // A seed only matters to a computer; with none playing it is not shown.
+  ui.seed = seats.some((s) => s !== 'local') ? seed ?? Math.floor(Math.random() * 2 ** 31) : null;
+  pacer = createPacer({ speed: pacer.speed });
   startLoop({ [players[0]]: seats[0], [players[1]]: seats[1] });
 }
 
@@ -345,6 +376,16 @@ const handlers = {
     ui.resupply = {};
     ui.error = null;
   },
+  // Pacing the computer (Phase 9b-4).
+  pause() {
+    pacer.pause();
+  },
+  resume() {
+    pacer.resume();
+  },
+  step() {
+    pacer.step();
+  },
   seen(el) {
     ui.seen.add(el.dataset.key);
   },
@@ -353,7 +394,7 @@ const handlers = {
     stopLoop();
     game = null;
     Object.assign(ui, {
-      viewer: null, solo: null, selected: null, plan: null, design: { ...EMPTY_DESIGN }, drafts: [], repairs: {}, resupply: {}, error: null,
+      viewer: null, solo: null, seed: null, selected: null, plan: null, design: { ...EMPTY_DESIGN }, drafts: [], repairs: {}, resupply: {}, error: null,
       draftKey: null, orders: {}, allocations: {}, dest: {}, placing: null, pickups: {}, rearrange: {}, seen: new Set(), log: [], logOpen: false,
     });
     ui.setup = { ...ui.setup, error: null };
@@ -503,6 +544,10 @@ mapEl.addEventListener('keydown', (e) => {
   if (!el) return;
   e.preventDefault();
   el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+});
+
+paceEl.addEventListener('change', (e) => {
+  if (e.target.matches('select[name="speed"]')) pacer.setSpeed(e.target.value);
 });
 
 // Remember whether the log is open across re-renders.

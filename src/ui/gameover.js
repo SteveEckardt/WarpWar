@@ -7,13 +7,14 @@ import { renderHexPanel } from './panel.js';
 import { renderLog, resultText } from './log.js';
 import { playerOf } from './view.js';
 
-export function renderGameOver(state, log) {
+// seed: the game's seed (Phase 9b-4), shown for a replay, if it had one.
+export function renderGameOver(state, log, { seed = null } = {}) {
   const r = state.result;
   const out = [];
   out.push(`<section class="game-over">`);
   out.push(r.draw ? `<h2>A draw</h2>` : `<h2 class="side-${r.winner}">${esc(r.player)} wins</h2>`);
   out.push(`<p>${esc(resultText(state))}</p>`);
-  out.push(`<p class="meta">Game-turn ${state.turn} · ${esc(state.scenario)} scenario</p>`);
+  out.push(`<p class="meta">Game-turn ${state.turn} · ${esc(state.scenario)} scenario${seed != null ? ` · Seed ${seed}` : ''}</p>`);
   // Near the top: the log below can be long.
   out.push(`<button type="button" class="primary" data-action="new-game">New game</button>`);
 

@@ -83,6 +83,10 @@ form.new-game input:not([type]) { width: 100%; margin-top: 2px; }
 .seat { display: flex; align-items: flex-end; gap: 8px; }
 .seat label { flex: 1; }
 .seat select { margin: 6px 0; }
+/* Phase 9b-4: pacing the computer */
+#pace { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#pace label { display: inline; margin: 0; }
+#pace select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 2px 4px; font: inherit; }
 fieldset { border: 1px solid var(--line); border-radius: 4px; margin: 8px 0; }
 fieldset label { display: inline-block; margin-right: 12px; }
 .attrs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }

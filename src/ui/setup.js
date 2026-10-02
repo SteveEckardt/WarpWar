@@ -17,14 +17,27 @@ const MODULE_TEXT = {
   ecm: 'ECM (fan §7.1.1), Advanced only: ECM powered from PD moves incoming Missiles\' Drive up or down, after orders are revealed.',
 };
 
-// Who plays each player: someone at this screen, or the computer (the planner, Phase 9b-3).
-const SEAT_TEXT = { local: 'Human', computer: 'Computer' };
+// Who plays each player: someone at this screen, or the computer at one of two strengths, its strategies
+// (src/play/computer.js): normal plans to win (Phase 9b-3), easy plays any legal move at random (9b-1, 9b-2).
+export const SEATS = { local: 'Human', plan: 'Computer: normal', random: 'Computer: easy' };
 
-// values: { player1, player2, seats: [kind, kind], first: 0 | 1, scenario, modules, error }.
+// The game's seed (Phase 9b-4): each computer's seed comes from it, so the same seed and settings replay a
+// computer vs computer game exactly. Blank: a new one is drawn.
+const MAX_SEED = 2 ** 31 - 1;
+export function parseSeed(text) {
+  const t = String(text ?? '').trim();
+  if (t === '') return { seed: null };
+  const n = Number(t);
+  if (!/^\d+$/.test(t) || n > MAX_SEED) return { error: `A seed is a whole number from 0 to ${MAX_SEED}` };
+  return { seed: n };
+}
+export const computerSeed = (seed, playerIndex) => (seed + playerIndex * 100003) % (MAX_SEED + 1);
+
+// values: { player1, player2, seats: [seat, seat] (keys of SEATS), seed: text, first: 0 | 1, scenario, modules, error }.
 export function renderNewGame({
-  player1 = 'Player 1', player2 = 'Player 2', seats = ['local', 'local'], first = 0, scenario = 'learning', modules = [], error = null,
+  player1 = 'Player 1', player2 = 'Player 2', seats = ['local', 'local'], seed = '', first = 0, scenario = 'learning', modules = [], error = null,
 } = {}) {
-  const seat = (n) => `<select name="seat${n + 1}" aria-label="Player ${n + 1} is">${Object.entries(SEAT_TEXT)
+  const seat = (n) => `<select name="seat${n + 1}" aria-label="Player ${n + 1} is">${Object.entries(SEATS)
     .map(([kind, text]) => `<option value="${kind}"${seats[n] === kind ? ' selected' : ''}>${text}</option>`).join('')}</select>`;
   const module = (id) => `<label class="scenario"><input type="checkbox" name="module" value="${id}"${modules.includes(id) ? ' checked' : ''}> ${MODULE_TEXT[id]}</label>`;
   const radio = (n) => `<input type="radio" name="first" value="${n}"${first === n ? ' checked' : ''}>`;
@@ -36,10 +49,12 @@ export function renderNewGame({
     `<fieldset><legend>Fan rules (optional)</legend>${Object.keys(MODULE_TEXT).map(module).join('')}</fieldset>`,
     `<div class="seat"><label>Player 1 <input name="player1" value="${esc(player1)}" required maxlength="24"></label>${seat(0)}</div>`,
     `<div class="seat"><label>Player 2 <input name="player2" value="${esc(player2)}" required maxlength="24"></label>${seat(1)}</div>`,
-    `<p class="hint">The computer plays to win by simple rules of thumb.</p>`,
+    `<p class="hint">Computer: normal plays to win by simple rules of thumb; easy plays any legal move at random.</p>`,
     `<fieldset><legend>Who moves first?</legend>`,
     `<label>${radio(0)} Player 1</label> <label>${radio(1)} Player 2</label>`,
     `</fieldset>`,
+    `<label>Seed <input name="seed" inputmode="numeric" value="${esc(String(seed))}" placeholder="random" maxlength="10"></label>`,
+    `<p class="hint">The same seed and settings replay a computer's game.</p>`,
     error ? `<p class="error" role="alert">${esc(error)}</p>` : '',
     `<button type="submit" class="primary">Start</button>`,
     `</form>`,

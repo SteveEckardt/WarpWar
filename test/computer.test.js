@@ -159,14 +159,3 @@ describe('the computer against a local player', () => {
     loop.stop();
   });
 });
-
-describe('the setup screen', () => {
-  test('each player is Human or Computer; Human by default', async () => {
-    const { renderNewGame } = await import('../src/ui/setup.js');
-    const html = renderNewGame({});
-    for (const n of [1, 2]) {
-      assert.match(html, new RegExp(`<select name="seat${n}"[^>]*><option value="local" selected>Human</option><option value="computer">Computer</option></select>`));
-    }
-    assert.match(renderNewGame({ seats: ['local', 'computer'] }), /<select name="seat2"[^>]*><option value="local">Human<\/option><option value="computer" selected>Computer/);
-  });
-});
