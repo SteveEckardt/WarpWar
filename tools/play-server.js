@@ -4,6 +4,8 @@
 // Messages from a browser, as JSON text (the room's own are in src/play/remote.js):
 //   { type: 'create', scenario, modules?, players: [p1, p2], first, seats: { [player]: 'remote' | 'plan' | 'random' },
 //     seed? }                                    makes a game; answered { type: 'created', code }
+//   { type: 'info', code }                       answered { type: 'info', code, settings, open, started }: the
+//                                                seats still open to join (Phase 9c-2)
 //   { type: 'join', code, player }               takes that player's remote seat; answered { type: 'joined', ... }
 //   { type: 'action', id, action }               answers a decision, once joined
 // Mistakes are answered { type: 'error', code, message } and the connection stays open.
@@ -12,6 +14,8 @@ import { randomInt } from 'node:crypto';
 import { acceptUpgrade } from './websocket.js';
 import { createRoom } from '../src/play/room.js';
 import { MAX_SEED } from '../src/play/computer.js';
+// The public log (D-039): the page's own words for each action, so every player reads the same log.
+import { logEntries } from '../src/ui/log.js';
 
 // Game codes: five letters and digits that cannot be mistaken for each other.
 export const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -45,13 +49,19 @@ export function attachPlay(server, { map }) {
         let room;
         try {
           const seed = m.seed ?? randomInt(MAX_SEED + 1);
-          room = createRoom({ map, scenario: m.scenario, modules: m.modules ?? [], players: m.players, first: m.first, seats: m.seats, seed });
+          room = createRoom({ map, scenario: m.scenario, modules: m.modules ?? [], players: m.players, first: m.first, seats: m.seats, seed, describe: logEntries });
         } catch (e) {
           return error('BAD_GAME', e.message);
         }
         const code = newCode();
         rooms.set(code, room);
         return send({ type: 'created', code });
+      },
+      info(m) {
+        const code = String(m.code ?? '').toUpperCase();
+        const room = rooms.get(code);
+        if (!room) return error('NO_GAME', `No game ${m.code}`);
+        return send({ type: 'info', code, ...room.info() });
       },
       join(m) {
         if (seat) return error('ALREADY_JOINED', `You are ${seat.player} in this game`);

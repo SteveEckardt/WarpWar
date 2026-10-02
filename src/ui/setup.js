@@ -20,9 +20,19 @@ const MODULE_TEXT = {
   ecm: 'ECM (fan §7.1.1), Advanced only: ECM powered from PD moves incoming Missiles\' Drive up or down, after orders are revealed.',
 };
 
-// Who plays each player: someone at this screen, or the computer at one of two strengths, its strategies
-// (src/play/computer.js): normal plans to win (Phase 9b-3), easy plays any legal move at random (9b-1, 9b-2).
-export const SEATS = { local: 'Human', plan: 'Computer: normal', random: 'Computer: easy' };
+// Who plays each player: someone at this screen, the computer at one of two strengths, its strategies
+// (src/play/computer.js): normal plans to win (Phase 9b-3), easy plays any legal move at random (9b-1, 9b-2);
+// or someone at another browser, through the server (Phase 9c-2).
+export const SEATS = { local: 'Human', plan: 'Computer: normal', random: 'Computer: easy', remote: 'Remote (another browser)' };
+
+// A game with a Remote player is held by the server (9c): this page plays its one Human, also as a remote seat
+// there. Returns { network: false }, { network: true, me, seats } (the server's seats), or { error }.
+export function networkGame(players, seats) {
+  if (!seats.includes('remote')) return { network: false };
+  const humans = players.filter((_, i) => seats[i] === 'local');
+  if (humans.length !== 1) return { error: 'A game with a Remote player needs one Human, at this screen' };
+  return { network: true, me: humans[0], seats: Object.fromEntries(players.map((p, i) => [p, seats[i] === 'local' ? 'remote' : seats[i]])) };
+}
 
 // The game's seed (Phase 9b-4): each computer's seed comes from it (computerSeed), so the same seed and settings
 // replay a computer vs computer game exactly. Blank: a new one is drawn.
@@ -74,4 +84,33 @@ export function renderChooseSide(state) {
     out.push(`<button type="button" class="side-choice side-${side}" data-action="side" data-side="${side}">Side ${side}: base ${esc(bases)}</button>`);
   }
   return out.join('\n');
+}
+
+// Joining a game held by the server (9c-2): a code to look up, then a button for each of its open seats.
+// values: { code, info: { settings, open } | null, error }.
+export function renderJoin({ code = '', info = null, error = null } = {}) {
+  const out = [`<h2>Join a game</h2>`, `<form class="join-game" autocomplete="off">`,
+    `<label>Game code <input name="code" value="${esc(code)}" required maxlength="5" autocapitalize="characters"></label>`,
+    `<button type="submit">Find game</button>`, `</form>`];
+  if (info) {
+    const { scenario, players } = info.settings;
+    out.push(`<p>${esc(scenario)} scenario: ${players.map(esc).join(' and ')}.</p>`);
+    if (info.open.length === 0) out.push(`<p class="hint">No seat is open in this game.</p>`);
+    for (const p of info.open) out.push(`<button type="button" class="primary" data-action="join-as" data-player="${esc(p)}">Join as ${esc(p)}</button>`);
+  }
+  if (error) out.push(`<p class="error" role="alert">${esc(error)}</p>`);
+  return out.join('\n');
+}
+
+// While the other player has still to join: the code to share and the address to open.
+// values: { code, player, settings, url }.
+export function renderWaiting({ code, player, settings, url }) {
+  const others = settings.players.filter((p) => p !== player && settings.seats[p] === 'remote');
+  return [
+    `<h2>Waiting to start</h2>`,
+    `<p>Game code <strong class="code">${esc(code)}</strong></p>`,
+    `<p>On the other computer, open <strong>${esc(url)}</strong> and join with this code. Other computers reach this one only if the server was started with <code>npm start -- --lan</code>.</p>`,
+    ...others.map((p) => `<p class="hint">Waiting for ${esc(p)} to join…</p>`),
+    `<button type="button" data-action="new-game">Cancel</button>`,
+  ].join('\n');
 }

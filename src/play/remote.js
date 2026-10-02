@@ -46,6 +46,10 @@ export function createRemoteController() {
     error(code, message) {
       post({ type: 'error', code, message });
     },
+    // Any other message for the player (the room's log entries).
+    tell(message) {
+      post(message);
+    },
     // The game as the player sees it, after each accepted action.
     show(view) {
       lastView = view;

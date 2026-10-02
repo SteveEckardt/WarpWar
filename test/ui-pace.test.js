@@ -88,10 +88,10 @@ describe('the pace bar', () => {
 });
 
 describe('the setup screen', () => {
-  test('each player is Human, Computer: normal (the planner) or Computer: easy (random)', () => {
-    assert.deepEqual(SEATS, { local: 'Human', plan: 'Computer: normal', random: 'Computer: easy' });
+  test('each player is Human, Computer: normal (the planner) or Computer: easy (random); or Remote (9c-2)', () => {
+    assert.deepEqual(SEATS, { local: 'Human', plan: 'Computer: normal', random: 'Computer: easy', remote: 'Remote (another browser)' });
     const html = renderNewGame({ seats: ['local', 'random'] });
-    assert.match(html, /<select name="seat1"[^>]*><option value="local" selected>Human<\/option><option value="plan">Computer: normal<\/option><option value="random">Computer: easy<\/option><\/select>/);
+    assert.match(html, /<select name="seat1"[^>]*><option value="local" selected>Human<\/option><option value="plan">Computer: normal<\/option><option value="random">Computer: easy<\/option><option value="remote">Remote \(another browser\)<\/option><\/select>/);
     assert.match(html, /<select name="seat2"[^>]*>.*<option value="random" selected>Computer: easy/);
   });
 

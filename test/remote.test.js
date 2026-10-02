@@ -183,4 +183,34 @@ describe('a room: one game on the server', () => {
     assert.match(room.failure.message, /broken/);
     assert.equal(sent.filter((m) => m.code === 'GAME_STOPPED').length, 2);
   });
+
+  test("the public log (Phase 9c-2): each action described for everyone, the log so far on joining", async () => {
+    const described = [];
+    const describe = (before, action, after) => {
+      described.push(action.type);
+      return [{ turn: after.turn, text: `${action.player}: ${action.type}` }];
+    };
+    const room = createRoom(settings({ ann: 'remote', bob: 'remote' }, { describe }));
+    assert.deepEqual(described, ['setFirstPlayer']);
+    const ann = [];
+    const bob = [];
+    room.join('ann', (m) => ann.push(m));
+    assert.deepEqual(ann[1], { type: 'log', entries: [{ turn: 1, text: 'ann: setFirstPlayer' }] });
+    room.join('bob', (m) => bob.push(m));
+    const decide = bob.find((m) => m.type === 'decide');
+    room.receive('bob', { type: 'action', id: decide.id, action: { type: 'chooseSide', player: 'bob', side: 'B' } });
+    await settle();
+    for (const got of [ann, bob]) {
+      assert.deepEqual(got.filter((m) => m.type === 'log').at(-1), { type: 'log', entries: [{ turn: 1, text: 'bob: chooseSide' }] });
+    }
+  });
+
+  test('info: the settings, which remote seats are still open, and whether it has started', () => {
+    const room = createRoom(settings({ ann: 'remote', bob: 'plan' }));
+    assert.deepEqual(room.info(), { settings: room.settings, open: ['ann'], started: false });
+    room.join('ann', () => {});
+    assert.deepEqual(room.info().open, []);
+    assert.equal(room.info().started, true);
+  });
 });
+

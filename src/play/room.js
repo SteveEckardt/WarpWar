@@ -5,6 +5,10 @@
 // The game starts once every remote seat is taken: the first player is set from the settings (§4), and the
 // second player's choice of side is the loop's first decision. After each accepted action every remote player is
 // sent their own view of the game (D-039); once it is over, that is everything.
+//
+// The public log (Phase 9c-2): describe(before, action, after) returns the entries both players may read about an
+// action ({ turn, text }; the page's logEntries). They are sent to every remote player as { type: 'log', entries },
+// and a player who joins is sent the log so far. Actions themselves are never sent: they can hold secrets.
 
 import { createGame, applyAction } from '../engine/game.js';
 import { viewFor } from '../engine/view.js';
@@ -14,17 +18,19 @@ import { createComputerController, computerSeed, STRATEGIES, MAX_SEED } from './
 
 export const SEAT_KINDS = ['remote', ...STRATEGIES];
 
-// settings: { map, scenario, modules, players: [p1, p2], first: player, seats: { [player]: SEAT_KINDS }, seed }.
-// Throws a RangeError for settings that do not make a game.
-export function createRoom({ map, scenario, modules = [], players, first, seats, seed }) {
+// settings: { map, scenario, modules, players: [p1, p2], first: player, seats: { [player]: SEAT_KINDS }, seed,
+// describe }. Throws a RangeError for settings that do not make a game.
+export function createRoom({ map, scenario, modules = [], players, first, seats, seed, describe = () => [] }) {
   const created = createGame({ map, scenario, players, modules });
   if (!seats || players.some((p) => !SEAT_KINDS.includes(seats[p]))) {
     throw new RangeError(`Each player's seat is ${SEAT_KINDS.join(', ')}`);
   }
   if (!players.some((p) => seats[p] === 'remote')) throw new RangeError('A room needs a remote player');
   if (!Number.isInteger(seed) || seed < 0 || seed > MAX_SEED) throw new RangeError(`A seed is a whole number from 0 to ${MAX_SEED}`);
-  const r = applyAction(created, { type: 'setFirstPlayer', player: first });
+  const firstAction = { type: 'setFirstPlayer', player: first };
+  const r = applyAction(created, firstAction);
   if (!r.ok) throw new RangeError(r.message);
+  const log = [...describe(created, firstAction, r.state)];
 
   const shown = { scenario, modules: [...modules], players: [...players], first, seats: { ...seats } };
   const controllers = Object.fromEntries(players.map((p, i) => [p,
@@ -50,6 +56,9 @@ export function createRoom({ map, scenario, modules = [], players, first, seats,
       controllers,
       onAction(before, action, after) {
         state = after;
+        const entries = describe(before, action, after);
+        log.push(...entries);
+        if (entries.length > 0) for (const p of remotes) controllers[p].tell({ type: 'log', entries });
         showAll(after);
       },
     });
@@ -70,6 +79,10 @@ export function createRoom({ map, scenario, modules = [], players, first, seats,
     get started() {
       return loop != null;
     },
+    // For a player about to join: the settings, the remote seats still open, and whether play has started.
+    info() {
+      return { settings: shown, open: remotes.filter((p) => !taken.has(p)), started: loop != null };
+    },
     // The error the game stopped on, if it did.
     get failure() {
       return failure;
@@ -82,6 +95,7 @@ export function createRoom({ map, scenario, modules = [], players, first, seats,
       if (taken.has(player)) return { ok: false, code: 'SEAT_TAKEN', message: `${player} has already joined` };
       taken.add(player);
       send({ type: 'joined', player, settings: shown });
+      if (log.length > 0) send({ type: 'log', entries: [...log] });
       controllers[player].attach(send);
       if (!loop && taken.size === remotes.length) start();
       return { ok: true };

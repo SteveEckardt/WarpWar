@@ -4,6 +4,8 @@
 // Each player is local (at this screen) or the computer, whose actions come after a short delay so they can be
 // followed. A local player's screen is drawn only from their view (D-039); the real state is used only for what
 // both players see together: the status line, the game log and a round's public report.
+// A game with a Remote player is held by the server (Phase 9c-2): this page plays its one Human through a client
+// (net.js), and `game` is then that player's view, as the server last sent it, with the server's public log.
 // D-039: between two local players, private views wait behind a handoff screen until the player who must act
 // says they are at the screen. A round's public report (§7 step 2) is shown to both players before the next
 // handoff. Add ?sample to the URL to load the Phase 7a sample game.
@@ -15,7 +17,8 @@ import { createGameLoop } from '../play/loop.js';
 import { starAt } from '../engine/map.js';
 import { renderMap, esc } from './hexmap.js';
 import { renderHexPanel, renderStatus } from './panel.js';
-import { renderNewGame, renderChooseSide, parseSeed, computerSeed } from './setup.js';
+import { renderNewGame, renderChooseSide, parseSeed, computerSeed, networkGame, renderJoin, renderWaiting } from './setup.js';
+import { connectPlay, playUrl } from './net.js';
 import { createPacer, renderPace } from './pace.js';
 import { EMPTY_DESIGN, nextShipId, buildAction, buildCheck, renderBuilder, renderBuildCheck, renderDesignSummary } from './builder.js';
 import { renderMovement, planInfo } from './movement.js';
@@ -52,6 +55,8 @@ const ui = {
   solo: null, // the only local player, against the computer
   seed: null, // the game's seed, when a computer plays (Phase 9b-4)
   paceKey: null, // what the pace bar last showed
+  net: null, // the client for a game held by the server (9c-2)
+  joining: {}, // the join form: { code, info, error, client }
   selected: null, // the hex { q, r } whose ships the panel shows
   plan: null, // the move being planned: { ship, steps }
   setup: {},
@@ -122,10 +127,14 @@ function placementPlan() {
 }
 
 function actionsHtml() {
-  if (!game) return renderNewGame(ui.setup);
+  if (!game && ui.net) return renderWaiting({ code: ui.net.code, player: ui.net.player, settings: ui.net.settings, url: location.href.replace(/[?#].*$/, '') });
+  if (!game) return `${renderNewGame(ui.setup)}<hr>${renderJoin(ui.joining)}`;
   const g = view();
   if (g.step !== 'over' && waitingFor()?.kind === 'computer') {
     return `<p class="hint">The computer is playing for ${esc(actingPlayer(game))}…</p>`;
+  }
+  if (g.step !== 'over' && waitingFor()?.kind === 'remote') {
+    return `<p class="hint">Waiting for ${esc(actingPlayer(game))}${waitingFor().byComputer ? ' (the computer, on the server)' : ', at another browser'}…</p>`;
   }
   if (g.step === 'setup') return renderChooseSide(g);
   if (g.step === 'build') return renderBuilder(g, ui.viewer, ui);
@@ -149,7 +158,8 @@ function render() {
   // Behind the handoff screen or a public report, the map shows only what both players see.
   let state = ui.preview;
   if (game) state = hide ? viewFor(game, null) : view();
-  statusEl.innerHTML = game ? renderStatus(game) : 'Set up a new game';
+  statusEl.innerHTML = game ? renderStatus(game) : ui.net ? 'Waiting for the other player to join' : 'Set up a new game';
+  if (ui.net?.closed && game?.step !== 'over') statusEl.textContent = 'The connection to the server was lost.';
   renderPaceBar();
   // Nobody human playing: the computers wait while a round report is open, so it is read before play goes on.
   pacer.hold(report != null && kindsOf().every((k) => k === 'computer'));
@@ -253,6 +263,44 @@ function stopLoop() {
   loop?.stop();
   loop = null;
   controllers = null;
+  ui.net?.close();
+  ui.net = null;
+  ui.joining.client?.close();
+}
+
+// Plays a game held by the server as `me`, through the client (9c-2). The other player is a remote seat here.
+function playNetwork(client) {
+  ui.net = client;
+  ui.joining = {};
+  const { seats, players } = client.settings;
+  const me = client.player;
+  controllers = Object.fromEntries(players.map((p) => [p, p === me ? client : { kind: 'remote', byComputer: seats[p] !== 'remote' }]));
+  ui.solo = me;
+  ui.viewer = me;
+  ui.seed = null;
+  const update = () => {
+    if (client !== ui.net) return;
+    game = client.view;
+    ui.log = client.log;
+  };
+  client.onUpdate(() => {
+    update();
+    if (client === ui.net) render();
+  });
+  update();
+}
+
+// Creates the game on the server and joins it as this page's Human. Resolves once joined, or with the error shown.
+async function startNetwork(settings, me) {
+  ui.setup.error = null;
+  try {
+    const client = await connectPlay(playUrl(location));
+    const code = await client.create(settings);
+    await client.join(code, me);
+    playNetwork(client);
+  } catch (e) {
+    ui.setup.error = e.message;
+  }
 }
 
 function startGame(form) {
@@ -267,21 +315,29 @@ function startGame(form) {
   const { seed, error } = parseSeed(seedText);
   if (error) {
     ui.setup.error = error;
-    return;
+    return null;
+  }
+  const net = networkGame(players, seats);
+  if (net.error) {
+    ui.setup.error = net.error;
+    return null;
+  }
+  if (net.network) {
+    return startNetwork({ scenario, modules, players, first: players[first], seats: net.seats, ...(seed != null ? { seed } : {}) }, net.me);
   }
   let created;
   try {
     created = createGame({ map: ui.mapData, scenario, players, modules });
   } catch (e) {
     ui.setup.error = e.message;
-    return;
+    return null;
   }
   // Who moves first is settled on this form (§4); the second player's choice of end comes through the loop.
   const action = { type: 'setFirstPlayer', player: players[first] };
   const r = applyAction(created, action);
   if (!r.ok) {
     ui.setup.error = r.message;
-    return;
+    return null;
   }
   ui.log = logEntries(created, action, r.state);
   game = r.state;
@@ -289,6 +345,20 @@ function startGame(form) {
   ui.seed = seats.some((s) => s !== 'local') ? seed ?? Math.floor(Math.random() * 2 ** 31) : null;
   pacer = createPacer({ speed: pacer.speed });
   startLoop({ [players[0]]: seats[0], [players[1]]: seats[1] });
+  return null;
+}
+
+// The join form (9c-2): looks the code up on the server, to offer its open seats.
+async function findGame(form) {
+  const code = String(new FormData(form).get('code') ?? '').trim().toUpperCase();
+  ui.joining.client?.close();
+  ui.joining = { code };
+  try {
+    const client = await connectPlay(playUrl(location));
+    ui.joining = { code, client, info: await client.info(code) };
+  } catch (e) {
+    ui.joining = { code, error: e.message };
+  }
 }
 
 const count = (input) => (input.value.trim() === '' ? 0 : Number(input.value));
@@ -376,6 +446,16 @@ const handlers = {
     ui.resupply = {};
     ui.error = null;
   },
+  // Joining a game held by the server, as one of its open seats (9c-2).
+  async 'join-as'(el) {
+    const { client, code } = ui.joining;
+    try {
+      await client.join(code, el.dataset.player);
+      playNetwork(client);
+    } catch (e) {
+      ui.joining = { ...ui.joining, error: e.message };
+    }
+  },
   // Pacing the computer (Phase 9b-4).
   pause() {
     pacer.pause();
@@ -394,7 +474,7 @@ const handlers = {
     stopLoop();
     game = null;
     Object.assign(ui, {
-      viewer: null, solo: null, seed: null, selected: null, plan: null, design: { ...EMPTY_DESIGN }, drafts: [], repairs: {}, resupply: {}, error: null,
+      viewer: null, solo: null, seed: null, joining: {}, selected: null, plan: null, design: { ...EMPTY_DESIGN }, drafts: [], repairs: {}, resupply: {}, error: null,
       draftKey: null, orders: {}, allocations: {}, dest: {}, placing: null, pickups: {}, rearrange: {}, seen: new Set(), log: [], logOpen: false,
     });
     ui.setup = { ...ui.setup, error: null };
@@ -558,9 +638,11 @@ panelEl.addEventListener('toggle', (e) => {
 document.addEventListener('submit', (e) => {
   e.preventDefault();
   if (e.target.matches('form.new-game')) {
-    startGame(e.target);
+    // A game held by the server is ready once created and joined; a local one at once.
+    Promise.resolve(startGame(e.target)).then(render);
     render();
   }
+  if (e.target.matches('form.join-game')) findGame(e.target).then(render);
 });
 
 // Form inputs only refresh their checks, so focus stays in the field being typed in.

@@ -113,6 +113,37 @@ online('the play server (/play)', () => {
     taken.close();
   });
 
+  test('info: before joining, which seats a code still has open (Phase 9c-2)', async () => {
+    const ann = await connect();
+    ann.send({ ...LEARNING, seats: { ann: 'remote', bob: 'remote' } });
+    const { code } = await ann.next('created');
+    ann.send({ type: 'join', code, player: 'ann' });
+    await ann.next('joined');
+    const bob = await connect();
+    bob.send({ type: 'info', code: code.toLowerCase() });
+    const info = await bob.next('info');
+    assert.deepEqual({ code: info.code, open: info.open, started: info.started }, { code, open: ['bob'], started: false });
+    assert.deepEqual(info.settings.seats, { ann: 'remote', bob: 'remote' });
+    bob.send({ type: 'info', code: 'QQQQQ' });
+    assert.equal((await bob.next('error')).code, 'NO_GAME');
+    ann.close();
+    bob.close();
+  });
+
+  test('the public log comes with play, in words both players may read (D-039)', async () => {
+    const ann = await connect();
+    ann.send({ ...LEARNING, seats: { ann: 'remote', bob: 'plan' } });
+    const { code } = await ann.next('created');
+    const game = autoplay(ann, 'plan', 4);
+    ann.send({ type: 'join', code, player: 'ann' });
+    await game;
+    const log = ann.all.filter((m) => m.type === 'log').flatMap((m) => m.entries);
+    assert.equal(log[0].text, 'ann moves first.');
+    assert.ok(log.length > 5);
+    assert.ok(log.every((e) => typeof e.text === 'string' && Number.isInteger(e.turn)));
+    ann.close();
+  });
+
   test('only /play takes WebSockets', async () => {
     await assert.rejects(connect('/other'));
   });
