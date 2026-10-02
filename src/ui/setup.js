@@ -3,6 +3,9 @@
 
 import { SIDES } from '../engine/game.js';
 import { esc } from './hexmap.js';
+import { MAX_SEED, computerSeed } from '../play/computer.js';
+
+export { computerSeed };
 
 const SCENARIO_TEXT = {
   learning: 'Learning (§4.1): 40 BP of Warpships each, the middle bases only; 1 victory point wins.',
@@ -21,9 +24,8 @@ const MODULE_TEXT = {
 // (src/play/computer.js): normal plans to win (Phase 9b-3), easy plays any legal move at random (9b-1, 9b-2).
 export const SEATS = { local: 'Human', plan: 'Computer: normal', random: 'Computer: easy' };
 
-// The game's seed (Phase 9b-4): each computer's seed comes from it, so the same seed and settings replay a
-// computer vs computer game exactly. Blank: a new one is drawn.
-const MAX_SEED = 2 ** 31 - 1;
+// The game's seed (Phase 9b-4): each computer's seed comes from it (computerSeed), so the same seed and settings
+// replay a computer vs computer game exactly. Blank: a new one is drawn.
 export function parseSeed(text) {
   const t = String(text ?? '').trim();
   if (t === '') return { seed: null };
@@ -31,7 +33,6 @@ export function parseSeed(text) {
   if (!/^\d+$/.test(t) || n > MAX_SEED) return { error: `A seed is a whole number from 0 to ${MAX_SEED}` };
   return { seed: n };
 }
-export const computerSeed = (seed, playerIndex) => (seed + playerIndex * 100003) % (MAX_SEED + 1);
 
 // values: { player1, player2, seats: [seat, seat] (keys of SEATS), seed: text, first: 0 | 1, scenario, modules, error }.
 export function renderNewGame({

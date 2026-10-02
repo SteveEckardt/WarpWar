@@ -2,7 +2,7 @@ import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
-import { createStaticServer } from '../tools/serve.js';
+import { createStaticServer, parseArgs } from '../tools/serve.js';
 
 // Phase 7a: the static file server behind "npm start".
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -62,5 +62,15 @@ describe('tools/serve.js', () => {
     const head = await get('/', 'HEAD');
     assert.equal(head.status, 200);
     assert.equal(head.body, '');
+  });
+});
+
+describe('npm start arguments (Phase 9c)', () => {
+  test('127.0.0.1 unless --lan; a port from the arguments, else PORT, else 8000', () => {
+    assert.deepEqual(parseArgs([]), { port: 8000, host: '127.0.0.1', lan: false });
+    assert.deepEqual(parseArgs(['--lan']), { port: 8000, host: '0.0.0.0', lan: true });
+    assert.deepEqual(parseArgs(['9000', '--lan']), { port: 9000, host: '0.0.0.0', lan: true });
+    assert.deepEqual(parseArgs([], { PORT: '8080' }), { port: 8080, host: '127.0.0.1', lan: false });
+    assert.throws(() => parseArgs(['--lna']), RangeError);
   });
 });

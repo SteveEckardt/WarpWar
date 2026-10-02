@@ -1,9 +1,14 @@
 // A minimal static file server for the UI. Node built-ins only.
-// Usage: npm start (or node tools/serve.js [port]). Serves the repository root on http://127.0.0.1:8000/.
+// Usage: npm start (or node tools/serve.js [port] [--lan]). Serves the repository root on http://127.0.0.1:8000/,
+// and remote play at ws://…/play (play-server.js, Phase 9c). --lan listens on the local network too: anyone on it
+// can reach the server, so it is off unless asked for.
 // GET and HEAD only; nothing outside the root, and no dotfiles or dot-directories.
 
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import { networkInterfaces } from 'node:os';
+import { attachPlay } from './play-server.js';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 
@@ -65,10 +70,24 @@ export function createStaticServer(root) {
   });
 }
 
+// Command-line arguments: a port (else PORT, else 8000) and --lan.
+export function parseArgs(args, env = {}) {
+  const lan = args.includes('--lan');
+  const rest = args.filter((a) => a !== '--lan');
+  const port = Number(rest[0] ?? env.PORT ?? 8000);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) throw new RangeError(`Not a port: ${rest[0] ?? env.PORT}`);
+  return { port, host: lan ? '0.0.0.0' : '127.0.0.1', lan };
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const port = Number(process.argv[2] ?? process.env.PORT ?? 8000);
-  createStaticServer(root).listen(port, '127.0.0.1', () => {
+  const { port, host, lan } = parseArgs(process.argv.slice(2), process.env);
+  const server = createStaticServer(root);
+  attachPlay(server, { map: JSON.parse(readFileSync(path.join(root, 'data/maps/classic-original.json'), 'utf8')) });
+  server.listen(port, host, () => {
     console.log(`WarpWar UI: http://127.0.0.1:${port}/`);
+    if (!lan) return;
+    const addresses = Object.values(networkInterfaces()).flat().filter((a) => a.family === 'IPv4' && !a.internal);
+    for (const a of addresses) console.log(`On the local network: http://${a.address}:${port}/`);
   });
 }

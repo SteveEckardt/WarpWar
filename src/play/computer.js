@@ -19,6 +19,10 @@ import { plannedActions } from './planner.js';
 
 export const STRATEGIES = ['random', 'plan'];
 
+// A game's seed (0 to MAX_SEED) gives each computer player its own: the player's index in the game's players.
+export const MAX_SEED = 2 ** 31 - 1;
+export const computerSeed = (seed, playerIndex) => (seed + playerIndex * 100003) % (MAX_SEED + 1);
+
 const other = (side) => (side === 'A' ? 'B' : 'A');
 
 // Per combat stage: the decisions, and the list of sides that owe one (orders are owed by both).

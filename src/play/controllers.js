@@ -7,11 +7,12 @@
 //
 //   local: a player at this screen. The UI shows the waiting request's view and submits the player's action.
 //   computer: the computer opponent (computer.js), given a seed and a strategy: random (9b-1, 9b-2) or plan (9b-3).
-//   remote: a player over the network (Phase 9c). Not implemented.
+//   remote: a player over the network (remote.js, Phase 9c): its decisions and views go out as messages.
 
 import { createComputerController } from './computer.js';
+import { createRemoteController } from './remote.js';
 
-export { createComputerController };
+export { createComputerController, createRemoteController };
 
 export const CONTROLLER_KINDS = ['local', 'computer', 'remote'];
 
@@ -46,15 +47,6 @@ export function createLocalController() {
     },
   };
 }
-
-const notImplemented = (kind) => ({
-  kind,
-  nextAction() {
-    throw new Error(`The ${kind} controller is not implemented`);
-  },
-});
-
-export const createRemoteController = () => notImplemented('remote');
 
 const FACTORIES = { local: createLocalController, computer: createComputerController, remote: createRemoteController };
 

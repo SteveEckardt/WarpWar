@@ -1,6 +1,6 @@
 # Roadmap
 
-Current phase: 9b-4
+Current phase: 9c-1
 
 0. Rules extraction: PDF to docs/rules/classic.md, ambiguities logged
 1. Ship building: attributes, BP costs, validation
@@ -49,4 +49,11 @@ Current phase: 9b-4
     rules of thumb, still only from its view; measured against the random player over many seeds
 9b-4. Difficulty levels and polish: a choice of computer strength on the setup screen, a seed shown for replays,
     pacing controls for watching computer vs computer
-9c. Remote play over WebSockets
+9c. Remote play over WebSockets: the server holds the game and runs its loop; each remote browser is a controller
+    that only ever receives its own view (D-039). A small WebSocket server of our own on node:http, no dependency.
+    npm start stays on 127.0.0.1; npm start -- --lan opens it to the local network. Players join with a game code
+9c-1. Server, protocol and remote controller, tested in Node: WebSocket handshake and frames (RFC 6455), a game room
+    with remote and computer seats, create and join by code, decisions and views as messages
+9c-2. UI for remote play: create a game (choosing which players are remote), share the code, join, and play it
+    from a browser through the server
+9c-3. Disconnects and rejoining: a seat's token to reconnect, the waiting decision sent again, rooms cleaned up

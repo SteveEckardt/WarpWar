@@ -201,13 +201,12 @@ describe('controllers', () => {
     assert.throws(() => createController('robot'), RangeError);
   });
 
-  test('remote is not implemented yet', () => {
-    assert.throws(() => createController('remote').nextAction(viewFor(sidesChosen(), 'A'), { side: 'A', player: 'ann' }), /not implemented/);
-  });
-
-  test('a loop that asks a remote player stops with that error', async () => {
-    const loop = createGameLoop({ state: sidesChosen(), controllers: { ann: createController('remote'), bob: createLocalController() } });
-    await assert.rejects(loop.run(), /not implemented/);
+  test('a loop asks a remote player by message, with their view (Phase 9c)', () => {
+    const sent = [];
+    const ann = createController('remote');
+    ann.attach((m) => sent.push(m));
+    createGameLoop({ state: sidesChosen(), controllers: { ann, bob: createLocalController() } }).run();
+    assert.deepEqual(sent, [{ type: 'decide', id: 1, view: viewFor(sidesChosen(), 'A'), side: 'A', player: 'ann', rejection: null }]);
   });
 
   test('a local controller with nothing asked of it refuses to submit', async () => {
