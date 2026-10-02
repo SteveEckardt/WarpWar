@@ -14,6 +14,8 @@ import {
   renderChoose, renderOrders, renderOrderCheck, blankOrders, pendingReport, renderHits, renderHitCheck,
   renderPlacement, placementShips, placementTargets,
 } from './combat.js';
+import { logEntries, renderLog } from './log.js';
+import { renderGameOver } from './gameover.js';
 import { actor, displayId, plainIds } from './view.js';
 import { sampleGame } from './sample.js';
 
@@ -42,6 +44,8 @@ const ui = {
   dest: {},
   placing: null,
   seen: new Set(), // public round reports already shown
+  log: [], // public game log entries, { turn, text }
+  logOpen: false,
 };
 
 const needsHandoff = () => ui.game && actor(ui.game) != null && ui.viewer !== actor(ui.game);
@@ -85,6 +89,7 @@ function actionsHtml() {
     if (c.stage === 'hits') return renderHits(g, ui.viewer, ui.allocations) + errorHtml();
     return renderPlacement(g, ui.viewer, ui.dest, ui.placing) + errorHtml();
   }
+  if (g.step === 'over') return renderGameOver(g, ui.log);
   if (g.step === 'rearrange') {
     return [
       `<h2>End of turn</h2>`,
@@ -125,7 +130,13 @@ function render() {
     return;
   }
   const info = ui.selected ? renderHexPanel(state, ui.selected, { viewer: ui.viewer }) : `<p class="hint">Click a star or hex to see the ships there.</p>`;
-  panelEl.innerHTML = `<div class="actions">${actionsHtml()}</div><div class="star-info">${info}</div>`;
+  // The game-over screen carries the whole log itself.
+  const log = ui.game && ui.game.step !== 'over'
+    ? `<details class="game-log"${ui.logOpen ? ' open' : ''}><summary>Game log (${ui.log.length})</summary>${renderLog(ui.log)}</details>`
+    : '';
+  panelEl.innerHTML = `<div class="actions">${actionsHtml()}</div><div class="star-info">${info}</div>${log}`;
+  const list = panelEl.querySelector('.game-log ol');
+  if (list) list.scrollTop = list.scrollHeight;
 }
 
 // Applies an action; on rejection keeps the message for the panel. Returns true if accepted.
@@ -135,6 +146,7 @@ function act(action) {
     ui.error = plainIds(r.message);
     return false;
   }
+  ui.log.push(...logEntries(ui.game, action, r.state));
   ui.game = r.state;
   ui.error = null;
   return true;
@@ -151,6 +163,7 @@ function startGame(form) {
     ui.setup.error = e.message;
     return;
   }
+  ui.log = [];
   act({ type: 'setFirstPlayer', player: players[first] });
 }
 
@@ -210,6 +223,14 @@ const handlers = {
   },
   seen(el) {
     ui.seen.add(el.dataset.key);
+  },
+  // Back to the setup form; the names from the last game stay filled in.
+  'new-game'() {
+    Object.assign(ui, {
+      game: null, viewer: null, selected: null, plan: null, design: { ...EMPTY_DESIGN }, drafts: [], error: null,
+      draftKey: null, orders: {}, allocations: {}, dest: {}, placing: null, seen: new Set(), log: [], logOpen: false,
+    });
+    ui.setup = { ...ui.setup, error: null };
   },
   side(el) {
     const second = ui.game.players.find((p) => p !== ui.game.first);
@@ -339,6 +360,11 @@ mapEl.addEventListener('keydown', (e) => {
   e.preventDefault();
   el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 });
+
+// Remember whether the log is open across re-renders.
+panelEl.addEventListener('toggle', (e) => {
+  if (e.target.matches('details.game-log')) ui.logOpen = e.target.open;
+}, true);
 
 document.addEventListener('submit', (e) => {
   e.preventDefault();
