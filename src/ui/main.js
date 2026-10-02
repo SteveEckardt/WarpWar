@@ -10,9 +10,10 @@ import { renderHexPanel, renderStatus } from './panel.js';
 import { renderNewGame, renderChooseSide } from './setup.js';
 import { EMPTY_DESIGN, nextShipId, buildAction, buildCheck, renderBuilder, renderBuildCheck, renderDesignSummary } from './builder.js';
 import { renderMovement, planInfo } from './movement.js';
+import { renderRearrange, currentLoads, rearrangeActionAt } from './rearrange.js';
 import {
   renderChoose, renderOrders, renderOrderCheck, blankOrders, pendingReport, renderHits, renderHitCheck,
-  renderPlacement, placementShips, placementTargets,
+  renderPlacement, placementShips, placementTargets, withdrawAction,
 } from './combat.js';
 import { logEntries, renderLog } from './log.js';
 import { renderGameOver } from './gameover.js';
@@ -45,6 +46,8 @@ const ui = {
   allocations: {},
   dest: {},
   placing: null,
+  pickups: {}, // forced withdrawal: { systemshipId: warpshipId }
+  rearrange: {}, // after combat (§8): { starId: { systemshipId: warpshipId | null } } being edited
   seen: new Set(), // public round reports already shown
   log: [], // public game log entries, { turn, text }
   logOpen: false,
@@ -64,6 +67,7 @@ function syncDrafts() {
   ui.allocations = {};
   ui.dest = {};
   ui.placing = null;
+  ui.pickups = {};
   if (!c || !ui.viewer) return;
   const side = g.sides[ui.viewer];
   if (c.stage === 'orders') ui.orders = blankOrders(g, side);
@@ -89,17 +93,10 @@ function actionsHtml() {
     if (!c) return renderChoose(g) + errorHtml();
     if (c.stage === 'orders') return renderOrders(g, ui.viewer, ui.orders) + errorHtml();
     if (c.stage === 'hits') return renderHits(g, ui.viewer, ui.allocations) + errorHtml();
-    return renderPlacement(g, ui.viewer, ui.dest, ui.placing) + errorHtml();
+    return renderPlacement(g, ui.viewer, ui.dest, ui.placing, ui.pickups) + errorHtml();
   }
   if (g.step === 'over') return renderGameOver(g, ui.log);
-  if (g.step === 'rearrange') {
-    return [
-      `<h2>End of turn</h2>`,
-      `<p class="hint">Movement and combat are over for this turn.</p>`,
-      errorHtml(),
-      `<button type="button" class="primary" data-action="end-turn">End turn</button>`,
-    ].join('\n');
-  }
+  if (g.step === 'rearrange') return renderRearrange(g, ui.viewer, ui.rearrange, ui.error);
   return '';
 }
 
@@ -190,18 +187,30 @@ function readOrders(form) {
       drive: count(row.querySelector('input[name="drive"]')),
     }));
     if (missiles.length > 0) order.missiles = missiles;
+    // §7.3: 'pickup:S01' or 'drop:S01'.
+    const [kind, sid] = (set.querySelector('select[name="carry"]')?.value ?? '').split(':');
+    if (kind === 'pickup' || kind === 'drop') order[kind] = sid;
     orders[set.dataset.ship] = order;
   }
   return orders;
 }
 
+// A ship's hits, and those it puts on its carried Systemships (D-021): { PD, ..., carried: { id: { PD, ... } } }.
 function readAllocations(form) {
-  const allocations = {};
-  for (const set of form.querySelectorAll('fieldset[data-ship]')) {
+  const read = (inputs) => {
     const a = {};
-    for (const input of set.querySelectorAll('input[type="number"]')) {
+    for (const input of inputs) {
       const n = count(input);
       if (n !== 0) a[input.name] = n;
+    }
+    return a;
+  };
+  const allocations = {};
+  for (const set of form.querySelectorAll('fieldset[data-ship]')) {
+    const a = read([...set.querySelectorAll('input[type="number"]')].filter((i) => !i.closest('fieldset[data-carried]')));
+    for (const inner of set.querySelectorAll('fieldset[data-carried]')) {
+      const ca = read(inner.querySelectorAll('input[type="number"]'));
+      if (Object.keys(ca).length > 0) a.carried = { ...(a.carried ?? {}), [inner.dataset.carried]: ca };
     }
     allocations[set.dataset.ship] = a;
   }
@@ -220,6 +229,7 @@ const handlers = {
   reveal() {
     ui.viewer = actor(ui.game);
     ui.plan = null;
+    ui.rearrange = {};
     ui.design = { ...EMPTY_DESIGN };
     ui.drafts = [];
     ui.repairs = {};
@@ -233,7 +243,7 @@ const handlers = {
   'new-game'() {
     Object.assign(ui, {
       game: null, viewer: null, selected: null, plan: null, design: { ...EMPTY_DESIGN }, drafts: [], repairs: {}, resupply: {}, error: null,
-      draftKey: null, orders: {}, allocations: {}, dest: {}, placing: null, seen: new Set(), log: [], logOpen: false,
+      draftKey: null, orders: {}, allocations: {}, dest: {}, placing: null, pickups: {}, rearrange: {}, seen: new Set(), log: [], logOpen: false,
     });
     ui.setup = { ...ui.setup, error: null };
   },
@@ -267,6 +277,17 @@ const handlers = {
     ui.selected = { q: ship.q, r: ship.r };
     ui.error = null;
   },
+  // A pickup or drop while moving (§6.2): 1 MP, on the hex the ship has reached.
+  'cargo-step'(el) {
+    const c = planInfo(ui.game, ui.plan.ship, ui.plan.steps).cargo[Number(el.dataset.index)];
+    if (c) ui.plan = { ...ui.plan, steps: [...ui.plan.steps, c.step] };
+    ui.error = null;
+  },
+  'apply-rearrange'(el) {
+    const star = el.dataset.star;
+    const loads = ui.rearrange[star] ?? currentLoads(ui.game, star, ui.game.sides[ui.viewer]);
+    if (act(rearrangeActionAt(ui.game, ui.viewer, star, loads))) delete ui.rearrange[star];
+  },
   'undo-step'() {
     ui.plan = { ...ui.plan, steps: ui.plan.steps.slice(0, -1) };
     ui.error = null;
@@ -286,7 +307,7 @@ const handlers = {
     act({ type: 'endMovement', player: ui.viewer });
   },
   'end-turn'() {
-    act({ type: 'endTurn', player: ui.viewer });
+    if (act({ type: 'endTurn', player: ui.viewer })) ui.rearrange = {};
   },
   'choose-combat'(el) {
     if (act({ type: 'chooseCombat', player: ui.viewer, star: el.dataset.star })) {
@@ -317,7 +338,7 @@ const handlers = {
   },
   'submit-placement'() {
     if (ui.game.combat.stage === 'retreats') act({ type: 'placeRetreats', player: ui.viewer, destinations: ui.dest });
-    else act({ type: 'withdraw', player: ui.viewer, destinations: ui.dest, pickups: {} });
+    else act(withdrawAction(ui.viewer, ui.dest, ui.pickups));
   },
 };
 
@@ -389,6 +410,19 @@ document.addEventListener('input', (e) => {
   if (orders) {
     ui.orders = readOrders(orders);
     $('order-check').innerHTML = renderOrderCheck(ui.game, ui.game.sides[ui.viewer], ui.orders);
+    return;
+  }
+  // Choices that change what else is offered: re-render the panel.
+  const shuffle = e.target.closest('form.rearrange');
+  if (shuffle) {
+    ui.rearrange = { ...ui.rearrange, [shuffle.dataset.star]: Object.fromEntries([...shuffle.querySelectorAll('select')].map((s) => [s.name, s.value || null])) };
+    render();
+    return;
+  }
+  const pickups = e.target.closest('form.pickups');
+  if (pickups) {
+    ui.pickups = Object.fromEntries([...pickups.querySelectorAll('select')].map((s) => [s.name, s.value || null]));
+    render();
     return;
   }
   const hits = e.target.closest('form.hits');

@@ -33,9 +33,35 @@ function roundText(before, after) {
     .filter((id) => last.damage[id]?.effective > 0)
     .map((id, i) => `${ship(after, last.ships[id].owner, id)} took ${last.damage[id].effective}${i === 0 ? ' effective hits' : ''}`);
   parts.push(`Round ${last.round} at ${starName(after, last.star)}: ${hits.length > 0 ? list(hits) : 'no effective hits'}.`);
-  if (last.destroyed.length > 0) parts.push(`Destroyed: ${list(last.destroyed.map((id) => ship(after, ownerIn(before, last, id), id)))}.`);
+  // D-039: a carried Systemship's counter was not on the map, so its loss is not public.
+  const lost = last.destroyed.filter((id) => id in last.ships);
+  if (lost.length > 0) parts.push(`Destroyed: ${list(lost.map((id) => ship(after, ownerIn(before, last, id), id)))}.`);
   if (last.escaped.length > 0) parts.push(`Escaped: ${list(last.escaped.map((id) => ship(after, ownerIn(before, last, id), id)))}.`);
   return parts.join(' ');
+}
+
+// What the counters show of a side's Systemships being taken aboard or put down (§5.1: a carried Systemship's
+// counter is off the map). Not which Warpship carries them (D-039).
+function counterChanges(before, after, side) {
+  // Aboard a Warpship on the map, or one that escaped and waits to be placed (D-028).
+  const aboard = (s, id) => [...Object.values(s.ships), ...Object.values(s.combat?.retreating ?? {})].some((sh) => id in (sh.carrying ?? {}));
+  const groups = (pairs) => {
+    const by = new Map();
+    for (const [id, hex] of pairs) {
+      const key = place(after, hex);
+      by.set(key, [...(by.get(key) ?? []), displayId(id)]);
+    }
+    return [...by];
+  };
+  // A Systemship only changes hex aboard a Warpship, so one found somewhere else was taken aboard and put down.
+  const moved = (id, sh) => id in after.ships && !sh.WG && (after.ships[id].q !== sh.q || after.ships[id].r !== sh.r);
+  const texts = [];
+  const left = Object.entries(before.ships).filter(([id, sh]) => sh.owner === side && ((!(id in after.ships) && aboard(after, id)) || moved(id, sh)));
+  for (const [where, ids] of groups(left)) texts.push(`${playerOf(after, side)}'s ${list(ids)} left the map at ${where} (taken aboard).`);
+  const back = Object.entries(after.ships).filter(([id, sh]) => sh.owner === side
+    && ((!(id in before.ships) && aboard(before, id)) || (id in before.ships && moved(id, before.ships[id]))));
+  for (const [where, ids] of groups(back)) texts.push(`${playerOf(after, side)}'s ${list(ids)} ${ids.length === 1 ? 'was' : 'were'} put down at ${where}.`);
+  return texts;
 }
 
 // Which of the loser's bases the winner's ships stand on (D-010).
@@ -84,6 +110,7 @@ export function logEntries(before, action, after) {
       const from = before.ships[action.ship];
       const to = after.ships[action.ship];
       texts.push(`${ship(after, side, action.ship)} moved from ${place(before, from)} to ${place(after, to)}.`);
+      texts.push(...counterChanges(before, after, side));
       break;
     }
     case 'endMovement':
@@ -97,6 +124,8 @@ export function logEntries(before, action, after) {
       // Secret until the round resolves; then its public result.
       if (after.lastRound && after.lastRound !== before.lastRound && JSON.stringify(after.lastRound) !== JSON.stringify(before.lastRound)) {
         texts.push(roundText(before, after));
+        // §7.3: Systemships picked up or dropped in the round.
+        for (const sd of ['A', 'B']) texts.push(...counterChanges(before, after, sd));
       }
       break;
     case 'placeRetreats':
@@ -104,12 +133,13 @@ export function logEntries(before, action, after) {
       break;
     case 'withdraw': {
       for (const [id, to] of Object.entries(action.destinations ?? {})) texts.push(`${ship(after, side, id)} withdrew to ${place(after, to)}.`);
+      texts.push(...counterChanges(before, after, side));
       const lost = after.lastRound?.withdrawalLosses ?? [];
       if (lost.length > 0) texts.push(`Left behind and destroyed: ${list(lost.map((id) => ship(after, side, id)))}.`);
       break;
     }
     case 'rearrange':
-      texts.push(`${action.player} rearranged Systemships at ${starName(after, action.star)}.`);
+      texts.push(...counterChanges(before, after, side));
       break;
     case 'endTurn':
       texts.push(`${action.player} ends the turn.`);

@@ -15,17 +15,24 @@ export function movers(state, side) {
     .map(([id, ship]) => ({ id, ship, moved: state.moved.includes(id) }));
 }
 
-// The hex a step leads to.
-const stepEnd = (map, step) => (step.type === 'jump' ? (({ q, r }) => ({ q, r }))(starById(map, step.to)) : { ...step.to });
+// The hex a step leads to; a pickup or drop stays where the ship is (§6.2).
+function stepEnd(map, step, here) {
+  if (step.type === 'jump') return (({ q, r }) => ({ q, r }))(starById(map, step.to));
+  if (step.type === 'move') return { ...step.to };
+  return { ...here };
+}
 
-// The plan so far: { cost, mp, end, path: hexes from the start, targets: [{ step, to }], blocked }.
-// blocked: why no further step is legal, in the engine's words, or null.
+// The plan so far: { cost, mp, end, path: hexes from the start, targets: [{ step, to }], cargo: [{ step, label }],
+// blocked }. targets are the map steps; cargo the pickups and drops possible here, 1 MP each (§6.2, D-017).
+// blocked: why no further map step is legal, in the engine's words, or null.
 export function planInfo(state, id, steps) {
   const ship = state.ships[id];
   const start = { q: ship.q, r: ship.r };
-  const path = [start, ...steps.map((s) => stepEnd(state.map, s))];
+  const path = [start];
+  for (const s of steps) path.push(stepEnd(state.map, s, path[path.length - 1]));
   const end = path[path.length - 1];
   const now = previewMove(state, id, steps);
+  const cargo = cargoSteps(state, id, steps, end);
 
   const candidates = neighbors(end).map((to) => ({ type: 'move', to }));
   const star = starAt(state.map, end);
@@ -39,7 +46,7 @@ export function planInfo(state, id, steps) {
   const reasons = [];
   for (const step of candidates) {
     const r = previewMove(state, id, [...steps, step]);
-    if (r.errors.length === 0) targets.push({ step, to: stepEnd(state.map, step) });
+    if (r.errors.length === 0) targets.push({ step, to: stepEnd(state.map, step, end) });
     else reasons.push(r.errors[0]);
   }
 
@@ -50,7 +57,29 @@ export function planInfo(state, id, steps) {
     else if (now.cost >= ship.PD) blocked = `All ${ship.PD} MP used`;
     else blocked = reasons[0]?.message ?? null;
   }
-  return { cost: now.cost, mp: ship.PD, end, path, targets, blocked };
+  return { cost: now.cost, mp: ship.PD, end, path, targets, cargo, blocked };
+}
+
+// Pickups of the owner's loose Systemships on this hex, then drops of what the ship carries by now; each kept
+// only if the engine allows it (a star hex, a free rack, MP left).
+function cargoSteps(state, id, steps, end) {
+  const ship = state.ships[id];
+  const aboard = new Set(Object.keys(ship.carrying ?? {}));
+  for (const s of steps) {
+    if (s.type === 'pickup') aboard.add(s.ship);
+    if (s.type === 'drop') aboard.delete(s.ship);
+  }
+  const loose = Object.entries(state.ships)
+    .filter(([sid, sh]) => sh.owner === ship.owner && !sh.WG && sh.q === end.q && sh.r === end.r && !aboard.has(sid))
+    .map(([sid]) => sid);
+  const dropped = new Set(steps.filter((s) => s.type === 'drop').map((s) => s.ship));
+  // A Systemship dropped earlier on this path may be picked up again where it now lies.
+  const here = [...loose, ...[...dropped].filter((sid) => !aboard.has(sid) && !loose.includes(sid))];
+  const candidates = [
+    ...here.sort().map((sid) => ({ step: { type: 'pickup', ship: sid }, label: `Pick up ${displayId(sid)}` })),
+    ...[...aboard].sort().map((sid) => ({ step: { type: 'drop', ship: sid }, label: `Drop ${displayId(sid)}` })),
+  ];
+  return candidates.filter(({ step }) => previewMove(state, id, [...steps, step]).errors.length === 0);
 }
 
 const where = (state, hex) => {
@@ -60,6 +89,8 @@ const where = (state, hex) => {
 
 function stepLabel(state, step) {
   if (step.type === 'jump') return `Warpline to ${esc(starById(state.map, step.to).name)}`;
+  if (step.type === 'pickup') return `Pick up ${esc(displayId(step.ship))}`;
+  if (step.type === 'drop') return `Drop ${esc(displayId(step.ship))}`;
   return `To ${where(state, step.to)}`;
 }
 
@@ -78,7 +109,10 @@ export function renderMovement(state, player, { plan, error }) {
     } else {
       out.push(`<ol class="steps">${plan.steps.map((s) => `<li>${stepLabel(state, s)}</li>`).join('')}</ol>`);
     }
-    if (info.blocked) out.push(`<p class="hint">No further steps: ${esc(info.blocked)}</p>`);
+    if (info.cargo.length > 0) {
+      out.push(`<div class="buttons">${info.cargo.map((c, i) => `<button type="button" data-action="cargo-step" data-index="${i}">${esc(c.label)} (1 MP)</button>`).join('')}</div>`);
+    }
+    if (info.blocked) out.push(`<p class="hint">No further steps on the map: ${esc(info.blocked)}</p>`);
     if (error) out.push(`<p class="error" role="alert">${esc(error)}</p>`);
     out.push(`<div class="buttons">`);
     out.push(`<button type="button" class="primary" data-action="confirm-move"${plan.steps.length === 0 ? ' disabled' : ''}>Confirm move</button>`);

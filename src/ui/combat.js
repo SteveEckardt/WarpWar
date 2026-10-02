@@ -4,11 +4,12 @@
 // D-039 and §7 step 2: orders are secret until both are in, then shown to both players with every shot and the
 // effective hits on each ship. Where an owner takes hits is on their own record and is never shown to the enemy.
 
-import { SIDES, previewDestination } from '../engine/game.js';
+import { SIDES, applyAction, previewDestination } from '../engine/game.js';
 import { validateOrders, hitsOwed, checkHitAllocation, QUIET_ROUNDS_TO_WITHDRAW } from '../engine/combat.js';
 import { ATTRIBUTES } from '../engine/ships.js';
 import { MISSILES_PER_HIT } from '../engine/damage.js';
 import { neighbors, onMap, starById } from '../engine/map.js';
+import { freeRacks } from '../engine/carrying.js';
 import { esc } from './hexmap.js';
 import { displayId, playerOf, plainIds } from './view.js';
 
@@ -22,6 +23,8 @@ export function orderText(id, ship, order) {
   const power = ['D', 'B', 'S', 'T'].map((k) => `${k}=${order[k] ?? 0}`).join(', ');
   const lines = [`${displayId(id)} (Level ${ship.level ?? 0}) ${verb}: ${power}.`];
   for (const m of order.missiles ?? []) lines.push(`M at ${displayId(m.target)}: D=${m.drive}.`);
+  if (order.pickup != null) lines.push(`Picks up ${displayId(order.pickup)}.`);
+  if (order.drop != null) lines.push(`Drops ${displayId(order.drop)}.`);
   return lines;
 }
 
@@ -81,6 +84,19 @@ function orderForm(state, id, ship, order, enemies) {
   const options = (selected) => enemies.map(([eid]) => `<option value="${esc(eid)}"${selected === eid ? ' selected' : ''}>${esc(displayId(eid))}</option>`).join('');
   if (ship.B > 0) {
     out.push(`<label class="target">Beam target <select name="beamTarget"><option value="">None</option>${options(order.beamTarget)}</select></label>`);
+  }
+  if (ship.WG) {
+    // §7.3: drop one carried Systemship, or pick up one of the side's loose Systemships here while a rack is free.
+    const loose = ownShips(state, ship.owner).filter(([, sh]) => !sh.WG).map(([sid]) => sid);
+    const choices = [
+      ...Object.keys(ship.carrying ?? {}).sort().map((sid) => [`drop:${sid}`, `Drop ${displayId(sid)}`]),
+      ...(freeRacks(ship) > 0 ? loose.map((sid) => [`pickup:${sid}`, `Pick up ${displayId(sid)}`]) : []),
+    ];
+    if (choices.length > 0) {
+      const now = order.pickup != null ? `pickup:${order.pickup}` : order.drop != null ? `drop:${order.drop}` : '';
+      const opts = [['', 'None'], ...choices].map(([v, label]) => `<option value="${esc(v)}"${v === now && v !== '' ? ' selected' : ''}>${esc(label)}</option>`).join('');
+      out.push(`<label class="target">Systemship <select name="carry">${opts}</select></label>`);
+    }
   }
   if (ship.T > 0 && ship.M > 0) {
     out.push(`<div class="missiles">`);
@@ -183,7 +199,9 @@ export function pendingReport(state, seen) {
       const star = starById(state.map, last.star);
       const out = [`<h3>Round ${last.round} at ${esc(star.name)}</h3>`, reportBody(state, ships, last.orders, last.shots, last.damage)];
       out.push(`<h4>Result</h4><ul>`);
-      out.push(last.destroyed.length > 0 ? `<li>Destroyed: ${last.destroyed.map((id) => tag(state, last.ships[id]?.owner, id)).join(', ')}</li>` : `<li>No ship destroyed.</li>`);
+      // D-039: a carried Systemship's counter was not on the map, so its loss is not public.
+      const lost = last.destroyed.filter((id) => id in last.ships);
+      out.push(lost.length > 0 ? `<li>Destroyed: ${lost.map((id) => tag(state, last.ships[id].owner, id)).join(', ')}</li>` : `<li>No ship destroyed.</li>`);
       if (last.escaped.length > 0) out.push(`<li>Escaped from the star: ${last.escaped.map((id) => tag(state, last.ships[id]?.owner, id)).join(', ')}</li>`);
       if (last.end) out.push(`<li>Combat over: ${esc(endText(last.end))}.</li>`);
       else out.push(`<li>${last.quietRounds} of ${QUIET_ROUNDS_TO_WITHDRAW} rounds in a row without effective hits.</li>`);
@@ -265,7 +283,19 @@ export function renderHits(state, player, allocations) {
       const label = attr === 'M' ? `M (${ship.M})` : `${attr} (${ship[attr]})`;
       out.push(num(attr, a[attr], can, label));
     }
-    out.push(`</div></fieldset>`);
+    out.push(`</div>`);
+    // D-021, D-034: hits may go to a carried Systemship's attributes instead. Occupied racks cannot take hits.
+    for (const [cid, rec] of Object.entries(state.combat.hex.ships[id].carrying ?? {})) {
+      const ca = a.carried?.[cid] ?? {};
+      out.push(`<fieldset class="carried" data-carried="${esc(cid)}"><legend>${esc(displayId(cid))}, carried</legend><div class="powers">`);
+      for (const attr of ATTRIBUTES) {
+        const can = attr === 'M' ? Math.ceil(rec.M / MISSILES_PER_HIT) : rec[attr];
+        if (can === 0) continue;
+        out.push(num(attr, ca[attr], can, attr === 'M' ? `M (${rec.M})` : `${attr} (${rec[attr]})`));
+      }
+      out.push(`</div></fieldset>`);
+    }
+    out.push(`</fieldset>`);
   }
   out.push(`</form>`);
   out.push(`<div id="hit-check">${renderHitCheck(state, side, allocations)}</div>`);
@@ -288,8 +318,25 @@ export function placementTargets(state, side) {
   return neighbors(star).filter((h) => onMap(state.map, h) && previewDestination(state, side, h) === null);
 }
 
+// §7 step 6(c), D-023: the side's loose Systemships in the hex, which its Warpships may carry off.
+const looseHere = (state, side) => ownShips(state, side).filter(([, sh]) => !sh.WG).map(([id]) => id);
+
+// pickups: { systemshipId: warpshipId } as chosen on screen; the engine wants { warpshipId: [systemshipIds] }.
+export function withdrawAction(player, dest, pickups = {}) {
+  const byCarrier = {};
+  for (const [sid, w] of Object.entries(pickups)) if (w) (byCarrier[w] ??= []).push(sid);
+  return { type: 'withdraw', player, destinations: dest, pickups: byCarrier };
+}
+
+// The engine's objection to the withdrawal as chosen, or null.
+export function withdrawCheck(state, player, dest, pickups = {}) {
+  const r = applyAction(state, withdrawAction(player, dest, pickups));
+  return r.ok ? null : plainIds(r.message);
+}
+
 // dest: { id: hex } chosen so far; placing: the ship whose hex the map is offering, or null.
-export function renderPlacement(state, player, dest, placing) {
+// pickups (forced withdrawal): { systemshipId: warpshipId } chosen so far.
+export function renderPlacement(state, player, dest, placing, pickups = {}) {
   const side = state.sides[player];
   const c = state.combat;
   const ships = placementShips(state, side);
@@ -304,7 +351,23 @@ export function renderPlacement(state, player, dest, placing) {
     out.push(`<tr${active}><th scope="row">${esc(displayId(id))}</th><td>${to ? esc(where) : where}</td><td><button type="button" class="link" data-action="pick-place" data-id="${esc(id)}">${id === placing ? 'Click a highlighted hex' : 'Choose hex'}</button></td></tr>`);
   }
   out.push(`</tbody></table>`);
-  const ready = ships.every((id) => dest[id]);
+  let problem = null;
+  if (c.stage === 'withdraw') {
+    const loose = looseHere(state, side);
+    if (loose.length > 0) {
+      const carriers = ships.filter((id) => freeRacks(c.hex.ships[id]) > 0);
+      out.push(`<p>Your Warpships may carry off loose Systemships, one per free rack; any left behind are destroyed (D-023).</p><form class="pickups" autocomplete="off">`);
+      for (const sid of loose) {
+        const opts = [`<option value="">Left behind (destroyed)</option>`]
+          .concat(carriers.map((w) => `<option value="${esc(w)}"${pickups[sid] === w ? ' selected' : ''}>${esc(displayId(w))}</option>`));
+        out.push(`<label>${esc(displayId(sid))}: <select name="${esc(sid)}">${opts.join('')}</select></label>`);
+      }
+      out.push(`</form>`);
+    }
+    if (ships.every((id) => dest[id])) problem = withdrawCheck(state, player, dest, pickups);
+    if (problem) out.push(`<p class="hint">${esc(problem)}</p>`);
+  }
+  const ready = ships.every((id) => dest[id]) && !problem;
   out.push(`<button type="button" class="primary" data-action="submit-placement"${ready ? '' : ' disabled'}>${c.stage === 'retreats' ? 'Place ships' : 'Withdraw'}</button>`);
   return out.join('\n');
 }
