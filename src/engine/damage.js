@@ -55,11 +55,13 @@ export function roundDamage(hits, screenPower, level) {
   return { total, absorbed, effective: total - absorbed };
 }
 
+// Destroyed when every attribute but the Warp Generator is zero; Armor counts (D-047).
 export function isDestroyed(ship) {
-  return ATTRIBUTES.every((attr) => ship[attr] === 0);
+  return ATTRIBUTES.every((attr) => ship[attr] === 0) && (ship.A ?? 0) === 0;
 }
 
-// Applies the owner's chosen allocation of effective hits, { PD, B, S, T, M, SR }: hits per attribute.
+// Applies the owner's chosen allocation of effective hits, { PD, B, S, T, M, SR, A }: hits per attribute
+// (A, Armor, only on a ship built with it: D-042, D-046).
 // Each hit removes one point, except Missiles: a hit removes 3, or all of 1-2 left (§7.2.2).
 // The Warp Generator never takes damage. The ship's Missile stock must already exclude
 // Missiles fired this round (D-029). Does not check the allocation against the round's
@@ -67,11 +69,11 @@ export function isDestroyed(ship) {
 export function applyHits(ship, allocation) {
   const next = { ...ship, built: { ...ship.built } };
   for (const [attr, hits] of Object.entries(allocation)) {
-    if (!ATTRIBUTES.includes(attr)) {
+    if (!ATTRIBUTES.includes(attr) && attr !== 'A') {
       throw new RangeError(`Cannot assign hits to: ${attr}`);
     }
     assertCount(hits, `Hits on ${attr}`);
-    const capacity = attr === 'M' ? Math.ceil(ship.M / MISSILES_PER_HIT) : ship[attr];
+    const capacity = attr === 'M' ? Math.ceil(ship.M / MISSILES_PER_HIT) : (ship[attr] ?? 0);
     if (hits > capacity) {
       throw new RangeError(`${hits} hits on ${attr} exceeds what it can take (${capacity})`);
     }

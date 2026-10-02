@@ -1,6 +1,6 @@
 // The side panel and status line as HTML strings. Pure: no DOM.
 
-import { ATTRIBUTES } from '../engine/ships.js';
+import { attributesFor } from '../engine/ships.js';
 import { SIDES, SCENARIOS } from '../engine/game.js';
 import { esc, shipsAt } from './hexmap.js';
 import { displayId, playerOf, seesRecords } from './view.js';
@@ -19,13 +19,13 @@ function cell(ship, attr) {
   return now === built ? `<td>${now}</td>` : `<td class="damaged">${now}<span class="built">/${built}</span></td>`;
 }
 
-function row(id, ship, note = '') {
-  return `<tr><th scope="row">${esc(displayId(id))}</th><td>${typeOf(ship)}${note}</td><td>${ship.level ?? 0}</td>${ATTRIBUTES.map((a) => cell(ship, a)).join('')}</tr>`;
+function row(id, ship, attributes, note = '') {
+  return `<tr><th scope="row">${esc(displayId(id))}</th><td>${typeOf(ship)}${note}</td><td>${ship.level ?? 0}</td>${attributes.map((a) => cell(ship, a)).join('')}</tr>`;
 }
 
 // D-039: an enemy ship is a counter. Its cargo is not on the map, so it is not shown.
-const counterRow = (id, ship) =>
-  `<tr><th scope="row">${esc(displayId(id))}</th><td>${typeOf(ship)}</td><td colspan="${ATTRIBUTES.length + 1}" class="hidden">Record hidden</td></tr>`;
+const counterRow = (id, ship, attributes) =>
+  `<tr><th scope="row">${esc(displayId(id))}</th><td>${typeOf(ship)}</td><td colspan="${attributes.length + 1}" class="hidden">Record hidden</td></tr>`;
 
 // options.viewer: the player at the screen, who sees their own records (D-039).
 export function renderStarPanel(state, starId, options = {}) {
@@ -46,6 +46,7 @@ export function renderHexPanel(state, hex, { viewer = null } = {}) {
     out.push(`<p class="meta">Hex ${hex.q}, ${hex.r}</p>`);
   }
   const here = shipsAt(state, hex);
+  const attributes = attributesFor(state.modules ?? []);
   if (here.length === 0) {
     out.push(`<p class="hint">No ships here.</p>`);
     return out.join('\n');
@@ -56,15 +57,15 @@ export function renderHexPanel(state, hex, { viewer = null } = {}) {
     const open = seesRecords(state, viewer, side);
     out.push(`<section class="side side-${side}">`);
     out.push(`<h3>${sideLabel(state, side)}</h3>`);
-    out.push(`<table><thead><tr><th>Ship</th><th>Type</th><th title="Tech level">Lvl</th>${ATTRIBUTES.map((a) => `<th>${a}</th>`).join('')}</tr></thead><tbody>`);
+    out.push(`<table><thead><tr><th>Ship</th><th>Type</th><th title="Tech level">Lvl</th>${attributes.map((a) => `<th>${a}</th>`).join('')}</tr></thead><tbody>`);
     for (const [id, ship] of ships) {
       if (!open) {
-        out.push(counterRow(id, ship));
+        out.push(counterRow(id, ship, attributes));
         continue;
       }
-      out.push(row(id, ship));
+      out.push(row(id, ship, attributes));
       for (const [cid, carried] of Object.entries(ship.carrying ?? {})) {
-        out.push(row(cid, carried, `<span class="carried">, carried by ${esc(displayId(id))}</span>`));
+        out.push(row(cid, carried, attributes, `<span class="carried">, carried by ${esc(displayId(id))}</span>`));
       }
     }
     out.push(`</tbody></table></section>`);
@@ -83,6 +84,8 @@ export function renderStatus(state) {
   const starName = (id) => state.map.stars.find((s) => s.id === id)?.name ?? id;
   const stage = state.step === 'combat' ? (state.combat ? `, ${state.combat.stage} at ${esc(starName(state.combat.star))}` : ', choosing a contested star') : '';
   parts.push(`step: ${state.step}${stage}`);
+  const fan = { armor: 'Armor' };
+  if (state.modules?.length) parts.push(`fan rules: ${state.modules.map((m) => fan[m] ?? m).join(', ')}`);
   // D-041: running totals, worth showing where more than one point is needed.
   const goal = SCENARIOS[state.scenario].victoryPoints;
   if (goal > 1 && state.sides) {

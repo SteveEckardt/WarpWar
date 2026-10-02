@@ -53,8 +53,8 @@ describe('view: whose screen it is (D-039)', () => {
 
 describe('builder logic', () => {
   test('Learning allows neither Systemships nor Systemship Racks (§4.1)', () => {
-    assert.deepEqual(buildOptions('learning'), { systemships: false, racks: false });
-    assert.deepEqual(buildOptions('advanced'), { systemships: true, racks: true });
+    assert.deepEqual(buildOptions('learning'), { systemships: false, racks: false, armor: false });
+    assert.deepEqual(buildOptions('advanced'), { systemships: true, racks: true, armor: false });
   });
 
   test('ids follow the counters: W1, W2 per side; lowest free number', () => {

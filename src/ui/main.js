@@ -156,9 +156,10 @@ function startGame(form) {
   const players = [String(data.get('player1')).trim(), String(data.get('player2')).trim()];
   const first = Number(data.get('first'));
   const scenario = String(data.get('scenario') ?? 'learning');
-  ui.setup = { player1: players[0], player2: players[1], first, scenario };
+  const modules = data.getAll('module').map(String);
+  ui.setup = { player1: players[0], player2: players[1], first, scenario, modules };
   try {
-    ui.game = createGame({ map: ui.mapData, scenario, players });
+    ui.game = createGame({ map: ui.mapData, scenario, players, modules });
   } catch (e) {
     ui.setup.error = e.message;
     return;

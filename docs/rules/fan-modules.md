@@ -37,14 +37,14 @@ data only as images (as with the classic map, D-019), so the owner must supply o
 
 | Module | What it adds (fan §) | Size | Depends on |
 |---|---|---|---|
-| **Armor** | Attribute A: 1 BP builds (2 + TL) points; each point absorbs one point of damage; repaired at 1 BP per 2 points (§10.2.2, §7.5) | S | none |
+| **Armor** (built, Phase 8b; D-042 to D-047) | Attribute A: 1 BP builds (2 + TL) points; each point absorbs one point of damage; repaired at 1 BP per 2 points (§10.2.2, §7.5) | S | none |
 | **Cannons and Shells** | Attributes C and SH: 1 PD powers a Cannon for 1 to 3 Shells; read on the CRT like a Beam (ship's own Drive); 1 hit per Shell, Hit bonus and TL added per burst; not with Beams or Screens, allowed with Missiles; 6 Shells per BP, resupplied likewise (§10.2.3, §10.2.4, §5.3.1, §7.5) | M | none |
 | **ECM** | Attribute E: powered from PD; after orders are revealed the defender spreads ECM points over incoming Missiles, each point changing that Missile's Drive setting, adjusted by the tech-level difference (§7.1.1, §7.2) | M | a new step in the combat round |
 | **Advanced Warp Generators** | Small (3 BP, ships up to 9 BP, no racks, 1 PD per MP), Medium (5 BP, up to 45 BP, 2 PD per MP), Large (15 BP, 45+ BP, 3 PD per MP) (§10.2.1) | S | none |
 
 Open questions found so far:
 
-- **Armor.** Is Armor taken where the owner chooses, like any attribute (§5.5.1 lists it with the others), or
+- **Armor.** *Resolved as D-042 to D-047.* Is Armor taken where the owner chooses, like any attribute (§5.5.1 lists it with the others), or
   must it absorb damage first? Does a ship with only Armor left survive? A hit on another attribute removes one
   BP's worth; a hit on Armor removes one point, which at TL 0 is half a BP's worth: confirm that is intended.
 - **Cannons.** Does each Cannon pick its own target, or one Cannon target per ship (§5.1 says "a target enemy

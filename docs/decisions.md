@@ -446,3 +446,71 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
 - **Ruling (2026-10-01):** A running total, never lost. At the start of each of a player's turns, the enemy base
   stars they occupy (D-010) are added to their total; the player wins when the total reaches the scenario's
   level. Holding one enemy base for two of your turns wins Basic; Learning (1 point) is unchanged.
+
+## I. Fan module: Armor (docs/rules/fan-extended.md)
+
+### D-042 — How Armor takes damage
+- **Status:** RESOLVED
+- **Where:** fan §10.2.2; fan §5.5; fan §5.5.1
+- **Text:** "(A) is ablative hull reinforcement. 1 BP builds (2 + tech level) points of Armor. One point of Armor will
+  absorb one point of damage." / "The player owning a ship decides where the hits are to be taken." / "This is
+  done by subtracting directly from Power/Drive rating, Beams, Tubes, Cannons, Missiles, Shells, Armor, ECM, Holds
+  and Systemship Racks."
+- **Question:** Is Armor an attribute like the others, which takes effective hits where its owner chooses, one
+  point per hit? Or does it absorb damage on its own, before (or after) Screens, until it is used up? Does a ship
+  with nothing left but Armor survive (classic §7 step 3 destroys a ship when all attributes but the Warp
+  Generator are zero)?
+- **Ruling (2026-10-01):** Armor absorbs on its own: after Screens, a ship's Armor takes its effective hits, one point per hit,
+  until it is used up; only the hits left over are placed by the owner. Armor counts as damage taken, not absorbed
+  by Screens (classic §7 step 6(c)).
+
+### D-043 — Buying Armor by the point
+- **Status:** RESOLVED
+- **Where:** fan §10.2.2; fan §3.2.1 (W7: TL2, A=8, 23 BP); D-015
+- **Text:** "1 BP builds (2 + tech level) points of Armor."
+- **Question:** May a ship be built with any number of Armor points, paying whole BP rounded up (as D-015 does
+  for Missiles: ceil(points ÷ (2 + TL)))? Or only in whole BP's worth (multiples of 2 + TL)?
+- **Ruling (2026-10-01):** Any number of points; cost is ceil(points ÷ (2 + TL)) BP, as D-015 does for Missiles.
+
+### D-044 — Repairing Armor
+- **Status:** RESOLVED
+- **Where:** fan §10.2.2; fan §7.5; classic §5.3
+- **Text:** "Armor is repaired at a cost of 1 BP per 2 points of Armor, regardless of tech level." / (Missiles)
+  "Fractions of BPs left over after resupply are not saved. However, one BP CAN be used to resupply (for
+  instance) 3 ships with one Missile each."
+- **Question:** Does repairing 1 point of Armor cost a whole BP? May one BP repair 1 point of Armor on each of
+  two ships, as one BP may resupply Missiles across ships?
+- **Ruling (2026-10-01):** Pooled: all Armor points repaired in one Build event cost ceil(total ÷ 2) BP, across ships.
+
+### D-045 — Which games may use Armor
+- **Status:** RESOLVED
+- **Where:** fan §10, §10.2; classic §4.1 to §4.3; D-011
+- **Text:** "The Players are to agree at the beginning of the game to use none, one or more of the following
+  optional rules" / "The Players are to agree at the beginning of the game to use one or more of the following
+  ship attributes"
+- **Question:** May players switch Armor on for any of the three classic scenarios (Learning, Basic, Advanced),
+  or only some? Outside Advanced every ship is Level 0 (D-011), so Armor would be 2 points per BP there: confirm.
+- **Ruling (2026-10-01):** Armor is an option a game is created with, off by default, in any of the three classic scenarios.
+  Outside Advanced ships are Level 0 (D-011), so 2 points per BP. Repairing Armor needs repair (§5.3), so Advanced
+  only.
+
+### D-046 — Armor on a carried Systemship (follows D-042)
+- **Status:** RESOLVED
+- **Where:** fan §10.2.2; fan §5.5; D-021; D-034; D-042
+- **Text:** "One point of Armor will absorb one point of damage." / "If there are Systemships still in a SR on a
+  Warpship that took damage, a player may take the damage on the Systemship record sheet."
+- **Question:** D-042 has Armor absorb a ship's effective hits first, after Screens. When the owner of a Warpship
+  puts some of its hits on a Systemship it carries (D-021, D-034), does that Systemship's own Armor absorb them
+  first too, or may the owner put them on any of the Systemship's attributes?
+- **Ruling (2026-10-01):** Yes. Hits the owner puts on a carried Systemship go to its Armor first, until used up.
+
+### D-047 — Armor and the smallest ship (follows D-042)
+- **Status:** RESOLVED
+- **Where:** fan §10.2.2; classic §7 step 3; D-014; D-038
+- **Text:** "Any ship that has received enough hits to reduce all its attributes to zero, except for the warp
+  generator … is destroyed." / D-014: "A ship must have at least one attribute above zero, not counting the Warp
+  Generator."
+- **Question:** Is Armor an attribute for these two rules? That is: may a ship be built with nothing but Armor,
+  and is a ship with Armor left (everything else at zero) still afloat?
+- **Ruling (2026-10-01):** Yes, both. A ship may be built with only Armor, and is destroyed only when every attribute, Armor
+  included, is zero.

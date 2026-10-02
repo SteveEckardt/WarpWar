@@ -6,7 +6,7 @@
 
 import { SIDES, applyAction, previewDestination } from '../engine/game.js';
 import { validateOrders, hitsOwed, checkHitAllocation, QUIET_ROUNDS_TO_WITHDRAW } from '../engine/combat.js';
-import { ATTRIBUTES } from '../engine/ships.js';
+import { ATTRIBUTES, attributesFor } from '../engine/ships.js';
 import { MISSILES_PER_HIT } from '../engine/damage.js';
 import { neighbors, onMap, starById } from '../engine/map.js';
 import { freeRacks } from '../engine/carrying.js';
@@ -245,6 +245,13 @@ export function hitsToTake(state, side) {
     });
 }
 
+// D-042: what each of the side's ships' Armor takes this round, before the owner places the rest.
+function armorShares(state, side) {
+  const c = state.combat;
+  const { damage } = hitsOwed(c.hex, allOrders(c));
+  return Object.fromEntries(Object.entries(damage).filter(([id, d]) => d.armor > 0 && c.hex.ships[id].owner === side).map(([id, d]) => [id, d.armor]));
+}
+
 // The engine's objections to a side's hit allocations: [{ ship, message }].
 export function hitProblems(state, side, allocations) {
   const c = state.combat;
@@ -273,8 +280,15 @@ export function renderHits(state, player, allocations) {
   const side = state.sides[player];
   const out = [header(state)];
   out.push(`<p>${esc(player)}, choose where your ships take their hits (§7.2.2). One hit removes one point, or 3 Missiles. Your opponent does not see this.</p>`);
+  // Ships whose Armor took every hit have nothing to place, but their owner still sees what Armor took.
+  const armor = armorShares(state, side);
+  const placing = new Set(hitsToTake(state, side).map((h) => h.id));
+  for (const [id, n] of Object.entries(armor)) {
+    if (!placing.has(id)) out.push(`<p class="hint">${esc(displayId(id))}: Armor takes <strong>${n}</strong>, all of its effective hits (D-042).</p>`);
+  }
   out.push(`<form class="hits" autocomplete="off">`);
   for (const { id, owed, ship } of hitsToTake(state, side)) {
+    if (armor[id]) out.push(`<p class="hint">${esc(displayId(id))}: Armor takes <strong>${armor[id]}</strong> first (D-042).</p>`);
     const a = allocations[id] ?? {};
     out.push(`<fieldset class="hit" data-ship="${esc(id)}"><legend><strong>${esc(displayId(id))}</strong> must take <strong>${owed} hits</strong></legend><div class="powers">`);
     for (const attr of ATTRIBUTES) {
@@ -288,8 +302,9 @@ export function renderHits(state, player, allocations) {
     for (const [cid, rec] of Object.entries(state.combat.hex.ships[id].carrying ?? {})) {
       const ca = a.carried?.[cid] ?? {};
       out.push(`<fieldset class="carried" data-carried="${esc(cid)}"><legend>${esc(displayId(cid))}, carried</legend><div class="powers">`);
-      for (const attr of ATTRIBUTES) {
-        const can = attr === 'M' ? Math.ceil(rec.M / MISSILES_PER_HIT) : rec[attr];
+      // D-046: a carried Systemship's Armor takes its hits first.
+      for (const attr of attributesFor(state.modules ?? [])) {
+        const can = attr === 'M' ? Math.ceil(rec.M / MISSILES_PER_HIT) : (rec[attr] ?? 0);
         if (can === 0) continue;
         out.push(num(attr, ca[attr], can, attr === 'M' ? `M (${rec.M})` : `${attr} (${rec[attr]})`));
       }

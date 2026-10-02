@@ -13,7 +13,7 @@
 // { star, round, stage, hex, ... } with stage 'orders', 'hits', 'retreats' or 'withdraw'.
 
 import { loadMap, starAt, starById, isHex, isAdjacent, sameHex, onMap } from './map.js';
-import { ATTRIBUTES, createShip, shipCost, validateShip } from './ships.js';
+import { ATTRIBUTES, createShip, shipCost, validateShip, techLevel } from './ships.js';
 import { validateMove, FIRST_TURN } from './movement.js';
 import { createHex, validateOrders, hitsOwed, checkHitAllocation, resolveRound } from './combat.js';
 import { rearrange, withdrawSystemships } from './carrying.js';
@@ -46,6 +46,13 @@ export const SCENARIOS = {
 // §5.1, §5.3: one BP buys three Missiles, and resupplies up to three, split across ships if wanted.
 const MISSILES_PER_BP = 3;
 
+// Fan rules a game may be created with (Phase 8, docs/rules/fan-modules.md). None by default.
+//   armor: Armor, A (fan §10.2.2, §7.5; D-042 to D-047), in any scenario (D-045).
+export const MODULES = ['armor'];
+
+// Fan §7.5, D-044: Armor is repaired at 1 BP per 2 points, regardless of tech level, pooled across ships.
+const ARMOR_REPAIR_PER_BP = 2;
+
 class Rejection extends Error {
   constructor(code, message) {
     super(message);
@@ -74,9 +81,12 @@ function checkBases(stars, scenario, bases) {
   }
 }
 
-// A new game waiting for setup (§4). Throws on bad input.
-export function createGame({ map, scenario, players }) {
+// A new game waiting for setup (§4). modules: the fan rules switched on (see MODULES). Throws on bad input.
+export function createGame({ map, scenario, players, modules = [] }) {
   if (!(scenario in SCENARIOS)) throw new RangeError(`A scenario is learning, basic or advanced, not: ${scenario}`);
+  if (!Array.isArray(modules) || modules.some((m) => !MODULES.includes(m)) || new Set(modules).size !== modules.length) {
+    throw new RangeError(`Modules are a list drawn from ${MODULES.join(', ')}, not: ${JSON.stringify(modules)}`);
+  }
   if (!Array.isArray(players) || players.length !== 2 || players[0] === players[1]
     || !players.every((p) => typeof p === 'string' && p.length > 0)) {
     throw new RangeError('A game needs two different player names');
@@ -92,6 +102,7 @@ export function createGame({ map, scenario, players }) {
     map: { ...loaded, stars },
     bases,
     players: [...players],
+    modules: [...modules],
     first: null,
     sides: null,
     turn: FIRST_TURN,
@@ -300,25 +311,29 @@ function build(s, action) {
       reject('DUPLICATE_ID', `Ship id already in use: ${id}`);
     }
     ids.add(id);
-    const errors = validateShip(isObject(design) ? design : {}, s.scenario);
+    const errors = validateShip(isObject(design) ? design : {}, s.scenario, s.modules);
     if (errors.length > 0) reject(errors[0].code, `${id}: ${errors[0].message}`);
     if (!s.bases[side].includes(at)) reject('NOT_A_BASE', `${id}: ${at} is not one of your base stars in this scenario`);
     if (!controlledBases(s, side).includes(at)) reject('BASE_NOT_CONTROLLED', `${id}: enemy ships are on ${at} (D-013)`);
-    total += shipCost(design);
+    total += shipCost(design, techLevel(s.scenario, s.turn));
   }
 
   // §5.3: one BP repairs one point, up to the ship's original strength. Missiles come back by resupply.
+  // Armor: 2 points per BP, pooled across ships (fan §7.5, D-044).
+  let armor = 0;
   for (const [id, amounts] of Object.entries(repairs)) {
     const record = repairable(s, side, id);
     if (!isObject(amounts)) reject('BAD_REPAIR', `${id}: a repair maps attributes to points`);
     for (const [attr, n] of Object.entries(amounts)) {
       if (attr === 'M') reject('BAD_REPAIR', `${id}: Missiles are resupplied, not repaired (§5.3)`);
-      if (!ATTRIBUTES.includes(attr)) reject('BAD_REPAIR', `${id}: cannot repair ${attr}`);
+      const isArmor = attr === 'A' && s.modules.includes('armor');
+      if (!ATTRIBUTES.includes(attr) && !isArmor) reject('BAD_REPAIR', `${id}: cannot repair ${attr}`);
       if (!Number.isInteger(n) || n < 1) reject('BAD_REPAIR', `${id}: repair ${attr} by a whole number of points, 1 or more`);
-      if (record[attr] + n > record.built[attr]) {
-        reject('OVER_BUILT', `${id}: ${attr} ${record[attr]} + ${n} is more than the ${record.built[attr]} it was built with (§5.3)`);
+      if ((record[attr] ?? 0) + n > (record.built[attr] ?? 0)) {
+        reject('OVER_BUILT', `${id}: ${attr} ${record[attr] ?? 0} + ${n} is more than the ${record.built[attr] ?? 0} it was built with (§5.3)`);
       }
-      total += n;
+      if (isArmor) armor += n;
+      else total += n;
     }
   }
   // §5.3: one BP resupplies up to 3 Missiles, across ships; fractions of a BP are not saved.
@@ -331,7 +346,7 @@ function build(s, action) {
     }
     missiles += n;
   }
-  total += Math.ceil(missiles / MISSILES_PER_BP);
+  total += Math.ceil(missiles / MISSILES_PER_BP) + Math.ceil(armor / ARMOR_REPAIR_PER_BP);
 
   if (total > s.bp[side]) reject('OVER_BP', `This costs ${total} BP but you have ${s.bp[side]}`);
   if (scenario.spendAll && total < s.bp[side]) {
@@ -340,7 +355,7 @@ function build(s, action) {
 
   for (const { id, design, at } of ships) {
     const star = starById(s.map, at);
-    s.ships[id] = { ...createShip(design, s.scenario, s.turn), owner: side, q: star.q, r: star.r };
+    s.ships[id] = { ...createShip(design, s.scenario, s.turn, s.modules), owner: side, q: star.q, r: star.r };
   }
   for (const [id, amounts] of Object.entries(repairs)) {
     const record = repairable(s, side, id);

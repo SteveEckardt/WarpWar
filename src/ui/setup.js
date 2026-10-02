@@ -10,14 +10,21 @@ const SCENARIO_TEXT = {
   advanced: 'Advanced (§4.3): 20 BP, then 10 every turn; all three bases, repair, resupply and technology; 3 victory points win.',
 };
 
-// values: { player1, player2, first: 0 | 1, scenario, error }.
-export function renderNewGame({ player1 = 'Player 1', player2 = 'Player 2', first = 0, scenario = 'learning', error = null } = {}) {
+// Fan rules a game may be created with (docs/rules/fan-modules.md), off by default.
+const MODULE_TEXT = {
+  armor: 'Armor (fan §10.2.2): 1 BP buys 2 + tech level points; Armor takes hits after Screens, on its own.',
+};
+
+// values: { player1, player2, first: 0 | 1, scenario, modules, error }.
+export function renderNewGame({ player1 = 'Player 1', player2 = 'Player 2', first = 0, scenario = 'learning', modules = [], error = null } = {}) {
+  const module = (id) => `<label class="scenario"><input type="checkbox" name="module" value="${id}"${modules.includes(id) ? ' checked' : ''}> ${MODULE_TEXT[id]}</label>`;
   const radio = (n) => `<input type="radio" name="first" value="${n}"${first === n ? ' checked' : ''}>`;
   const choice = (id) => `<label class="scenario"><input type="radio" name="scenario" value="${id}"${scenario === id ? ' checked' : ''}> ${SCENARIO_TEXT[id]}</label>`;
   return [
     `<h2>New game</h2>`,
     `<form class="new-game" autocomplete="off">`,
     `<fieldset><legend>Scenario</legend>${Object.keys(SCENARIO_TEXT).map(choice).join('')}</fieldset>`,
+    `<fieldset><legend>Fan rules (optional)</legend>${Object.keys(MODULE_TEXT).map(module).join('')}</fieldset>`,
     `<label>Player 1 <input name="player1" value="${esc(player1)}" required maxlength="24"></label>`,
     `<label>Player 2 <input name="player2" value="${esc(player2)}" required maxlength="24"></label>`,
     `<fieldset><legend>Who moves first?</legend>`,

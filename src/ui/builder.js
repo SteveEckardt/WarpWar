@@ -4,20 +4,25 @@
 // the action on the engine (applyAction never changes the state it is given).
 
 import { applyAction, controlledBases, repairCandidates, SCENARIOS } from '../engine/game.js';
-import { ATTRIBUTES, shipCost, validateShip } from '../engine/ships.js';
+import { ATTRIBUTES, attributesFor, shipCost, techLevel, validateShip } from '../engine/ships.js';
 import { esc } from './hexmap.js';
 import { displayId, plainIds } from './view.js';
 
 export const EMPTY_DESIGN = Object.freeze({ WG: true, PD: 0, B: 0, S: 0, T: 0, M: 0, SR: 0 });
 
-const LABELS = { PD: 'Power/Drive', B: 'Beam', S: 'Screen', T: 'Tubes', M: 'Missiles', SR: 'Systemship Racks' };
+const LABELS = { PD: 'Power/Drive', B: 'Beam', S: 'Screen', T: 'Tubes', M: 'Missiles', SR: 'Systemship Racks', A: 'Armor' };
 const MISSILES_PER_BP = 3; // for showing the cost; the engine charges it
+const ARMOR_REPAIR_PER_BP = 2; // fan §7.5, D-044; likewise
 
-// What the scenario lets a player build, asked of the engine rather than restated (§4.1-4.3).
-export function buildOptions(scenario) {
+// The tech level of ships built now (§5.2), which sets the price of Armor (fan §10.2.2).
+const levelNow = (state) => techLevel(state.scenario, state.turn);
+
+// What the scenario and the game's modules let a player build, asked of the engine rather than restated.
+export function buildOptions(scenario, modules = []) {
   return {
-    systemships: validateShip({ WG: false, PD: 1 }, scenario).length === 0,
-    racks: validateShip({ WG: true, PD: 1, SR: 1 }, scenario).length === 0,
+    systemships: validateShip({ WG: false, PD: 1 }, scenario, modules).length === 0,
+    racks: validateShip({ WG: true, PD: 1, SR: 1 }, scenario, modules).length === 0,
+    armor: validateShip({ WG: true, PD: 1, A: 1 }, scenario, modules).length === 0,
   };
 }
 
@@ -35,7 +40,7 @@ export function nextShipId(state, side, drafts, warpship) {
   return name(n);
 }
 
-export const draftTotal = (drafts) => drafts.reduce((sum, d) => sum + shipCost(d.design), 0);
+export const draftTotal = (drafts, level = 0) => drafts.reduce((sum, d) => sum + shipCost(d.design, level), 0);
 
 // Only the attributes the design uses, so the engine sees what the player chose.
 const compact = (design) => Object.fromEntries(Object.entries(design).filter(([k, v]) => (k === 'WG' ? v : v > 0)));
@@ -59,8 +64,17 @@ export function buildAction(player, drafts, repairs = {}, resupply = {}) {
 // message }. message is null when the engine would accept the build as it stands.
 export function buildCheck(state, player, { drafts = [], repairs = {}, resupply = {} }) {
   const side = state.sides[player];
-  const ships = draftTotal(drafts);
-  const points = Object.values(cleanRepairs(repairs)).reduce((sum, a) => sum + Object.values(a).reduce((x, n) => x + (Number(n) || 0), 0), 0);
+  const ships = draftTotal(drafts, levelNow(state));
+  // Armor is mended at 2 points per BP, pooled across ships (D-044); everything else at 1 point per BP.
+  let armorPoints = 0;
+  let points = 0;
+  for (const a of Object.values(cleanRepairs(repairs))) {
+    for (const [attr, n] of Object.entries(a)) {
+      if (attr === 'A') armorPoints += Number(n) || 0;
+      else points += Number(n) || 0;
+    }
+  }
+  points += Math.ceil(armorPoints / ARMOR_REPAIR_PER_BP);
   const missiles = Object.values(cleanResupply(resupply)).reduce((sum, n) => sum + (Number(n) || 0), 0);
   const resupplyCost = Math.ceil(missiles / MISSILES_PER_BP);
   const total = ships + points + resupplyCost;
@@ -82,14 +96,14 @@ export function renderBuildCheck(state, player, ui) {
   return out.join('\n');
 }
 
-const record = (design) => ATTRIBUTES.map((a) => `${a}=${design[a] ?? 0}`).join(', ');
+const record = (design, modules) => attributesFor(modules).map((a) => `${a}=${design[a] ?? 0}`).join(', ');
 
 // The cost of the design being edited, its errors, and the Add button. Re-rendered on every keystroke.
 // committed: BP already marked for repair and resupply.
 export function renderDesignSummary(state, side, design, drafts, committed = 0) {
-  const left = state.bp[side] - draftTotal(drafts) - committed;
-  const cost = shipCost(design);
-  const problems = validateShip(compact(design), state.scenario).map((e) => e.message);
+  const left = state.bp[side] - draftTotal(drafts, levelNow(state)) - committed;
+  const cost = shipCost(design, levelNow(state));
+  const problems = validateShip(compact(design), state.scenario, state.modules).map((e) => e.message);
   if (problems.length === 0 && cost > left) problems.push(`Costs ${cost} BP, more than the ${left} BP left`);
   const out = [];
   out.push(`<p class="cost">This ship: <strong>${cost} BP</strong></p>`);
@@ -98,27 +112,28 @@ export function renderDesignSummary(state, side, design, drafts, committed = 0) 
   return out.join('\n');
 }
 
-const needsWork = (ship) => ATTRIBUTES.some((a) => (ship[a] ?? 0) < (ship.built?.[a] ?? 0));
+const needsWork = (ship, modules) => attributesFor(modules).some((a) => (ship[a] ?? 0) < (ship.built?.[a] ?? 0));
 
 // §5.3: the side's ships at its bases that are damaged or short of Missiles, with a field for each.
 function renderRepairs(state, side, repairs, resupply) {
   const starName = (hex) => state.map.stars.find((s) => s.q === hex.q && s.r === hex.r)?.name ?? '';
   const out = [`<h3>Repair and resupply</h3>`];
-  const ships = repairCandidates(state, side).filter(({ ship }) => needsWork(ship));
+  const ships = repairCandidates(state, side).filter(({ ship }) => needsWork(ship, state.modules));
   if (ships.length === 0) {
     out.push(`<p class="hint">None of your ships at your bases is damaged or short of Missiles.</p>`);
     return out.join('\n');
   }
-  out.push(`<p class="hint">One BP repairs one point, up to the strength the ship was built with. One BP resupplies up to 3 Missiles, across ships (§5.3).</p>`);
+  const armorNote = state.modules?.includes('armor') ? ' One BP repairs 2 points of Armor, across ships (D-044).' : '';
+  out.push(`<p class="hint">One BP repairs one point, up to the strength the ship was built with. One BP resupplies up to 3 Missiles, across ships (§5.3).${armorNote}</p>`);
   out.push(`<form class="repairs" autocomplete="off">`);
   for (const { id, ship, carrier } of ships) {
     const where = carrier ? `carried by ${displayId(carrier)}` : `at ${starName(state.ships[id])}`;
     out.push(`<fieldset class="repair" data-ship="${esc(id)}"><legend>${esc(displayId(id))} · ${ship.WG ? 'Warpship' : 'Systemship'} · ${esc(where)}</legend><div class="powers">`);
-    for (const a of ATTRIBUTES) {
+    for (const a of attributesFor(state.modules)) {
       const missing = (ship.built?.[a] ?? 0) - (ship[a] ?? 0);
       if (missing <= 0) continue;
       const value = a === 'M' ? (resupply[id] ?? 0) : (repairs[id]?.[a] ?? 0);
-      const label = a === 'M' ? `Missiles ${ship.M}/${ship.built.M}` : `${a} ${ship[a]}/${ship.built[a]}`;
+      const label = a === 'M' ? `Missiles ${ship.M}/${ship.built.M}` : `${a} ${ship[a] ?? 0}/${ship.built[a]}`;
       out.push(`<label><span>${label}</span><input type="number" name="${a}" min="0" max="${missing}" step="1" value="${value}" inputmode="numeric"></label>`);
     }
     out.push(`</div></fieldset>`);
@@ -134,7 +149,8 @@ export function renderBuilder(state, player, ui) {
   const resupply = ui.resupply ?? {};
   const side = state.sides[player];
   const scenario = SCENARIOS[state.scenario];
-  const options = buildOptions(state.scenario);
+  const options = buildOptions(state.scenario, state.modules);
+  const level = levelNow(state);
   const bases = state.bases[side];
   const controlled = controlledBases(state, side);
   const starName = (id) => state.map.stars.find((s) => s.id === id)?.name ?? id;
@@ -152,9 +168,9 @@ export function renderBuilder(state, player, ui) {
     out.push(`<p class="hint">Warpships only: every ship has a Warp Generator (5 BP).</p>`);
   }
   out.push(`<div class="attrs">`);
-  for (const a of ATTRIBUTES) {
+  for (const a of attributesFor(state.modules)) {
     if (a === 'SR' && !options.racks) continue;
-    const per = a === 'M' ? '3 per BP' : '1 BP each';
+    const per = a === 'M' ? '3 per BP' : a === 'A' ? `${2 + level} points per BP` : '1 BP each';
     out.push(`<label><span>${a}</span><input type="number" name="${a}" min="0" step="1" value="${design[a] ?? 0}" inputmode="numeric"><small>${LABELS[a]}, ${per}</small></label>`);
   }
   out.push(`</div>`);
@@ -176,7 +192,7 @@ export function renderBuilder(state, player, ui) {
   } else {
     out.push(`<table class="drafts"><tbody>`);
     for (const d of drafts) {
-      out.push(`<tr><th scope="row">${esc(displayId(d.id))}</th><td class="rec">${record(d.design)}<br><small>at ${esc(starName(d.at))}</small></td><td>${shipCost(d.design)} BP</td><td><button type="button" class="link" data-action="remove" data-id="${esc(d.id)}" aria-label="Remove ${esc(displayId(d.id))}">Remove</button></td></tr>`);
+      out.push(`<tr><th scope="row">${esc(displayId(d.id))}</th><td class="rec">${record(d.design, state.modules)}<br><small>at ${esc(starName(d.at))}</small></td><td>${shipCost(d.design, level)} BP</td><td><button type="button" class="link" data-action="remove" data-id="${esc(d.id)}" aria-label="Remove ${esc(displayId(d.id))}">Remove</button></td></tr>`);
     }
     out.push(`</tbody></table>`);
   }

@@ -159,6 +159,9 @@ function hitCapacity(ship, racks = ship.SR) {
   return ship.PD + ship.B + ship.S + ship.T + racks + Math.ceil(ship.M / MISSILES_PER_HIT);
 }
 
+// Hits the owner places after Armor has taken its share (D-042).
+const toPlace = (damage) => damage.effective - (damage.armor ?? 0);
+
 const sumHits = (hits) => Object.values(hits).reduce((sum, h) => sum + h, 0);
 const withoutOwner = ({ owner, ...record }) => record;
 function endReason(hows) {
@@ -197,11 +200,13 @@ function prepareRound(hex, orders) {
     for (const m of missilesOf(order)) fire(m.target, { type: 'missile' }, 'attack', m.drive);
   }
 
-  // All hits on a ship are summed, then its Screen subtracts once (§7.2.2).
+  // All hits on a ship are summed, then its Screen subtracts once (§7.2.2). Then Armor takes what it can of the
+  // effective hits, on its own (D-042): `armor` is set only for a ship built with Armor.
   const damage = {};
   for (const id of ids) {
     const hits = shots.filter((s) => s.to === id).map((s) => s.damage);
     damage[id] = roundDamage(hits, power(orders[id], 'S'), hex.ships[id].level);
+    if (hex.ships[id].A > 0) damage[id].armor = Math.min(damage[id].effective, hex.ships[id].A);
   }
   return { ids, afterFiring, shots, damage };
 }
@@ -217,16 +222,24 @@ function hitLimits(hex, orders, afterFiring, id, effective) {
   const racks = base.SR - Object.keys(cargo).length - pickRack;
   // Most the ship can take apart from the pickup rack: its hittable attributes, its carried Systemships,
   // and the racks they free.
-  const capacity = Object.values(cargo).reduce((sum, rec) => sum + hitCapacity(rec) + 1, hitCapacity(afterFiring[id], racks));
+  // A carried Systemship's Armor takes hits too (D-046).
+  const capacity = Object.values(cargo).reduce((sum, rec) => sum + hitCapacity(rec) + (rec.A ?? 0) + 1, hitCapacity(afterFiring[id], racks));
   return { cargo, racks, capacity, owed: Math.min(effective, capacity + pickRack) };
 }
 
-// Checks one ship's hit allocation and applies it. Returns { ship, cargoAfter }. Throws RangeError.
-function takeHits(hex, orders, afterFiring, id, effective, hitAllocation = {}) {
-  const { cargo, racks, capacity, owed } = hitLimits(hex, orders, afterFiring, id, effective);
+// Checks one ship's hit allocation and applies it, after its Armor's share (D-042). Returns { ship, cargoAfter }.
+// Throws RangeError.
+function takeHits(hex, orders, afterFiring, id, damage, hitAllocation = {}) {
+  const { cargo, racks, capacity, owed } = hitLimits(hex, orders, afterFiring, id, toPlace(damage));
   const { carried: cargoHits = {}, ...allocation } = hitAllocation;
-  for (const cid of Object.keys(cargoHits)) {
+  if ('A' in allocation) throw new RangeError(`${id}: Armor takes hits on its own (D-042)`);
+  for (const [cid, hits] of Object.entries(cargoHits)) {
     if (!(cid in cargo)) throw new RangeError(`${id} does not carry ${cid}`);
+    // D-046: hits on a carried Systemship go to its Armor until it is used up.
+    const onArmor = hits.A ?? 0;
+    if (sumHits(hits) > onArmor && onArmor < (cargo[cid].A ?? 0)) {
+      throw new RangeError(`${cid}: hits on a carried Systemship go to its Armor first (D-046)`);
+    }
   }
   // D-034: a carried Systemship destroyed by this round's hits frees its rack, which can then take hits.
   const cargoAfter = Object.fromEntries(Object.entries(cargo).map(([cid, rec]) => [cid, applyHits(rec, cargoHits[cid] ?? {})]));
@@ -240,14 +253,15 @@ function takeHits(hex, orders, afterFiring, id, effective, hitAllocation = {}) {
   if (assigned !== owed) {
     throw new RangeError(`${id} takes ${owed} hits but ${assigned} were assigned`);
   }
-  return { ship: applyHits(afterFiring[id], allocation), cargoAfter };
+  const armored = damage.armor > 0 ? { ...afterFiring[id], A: afterFiring[id].A - damage.armor } : afterFiring[id];
+  return { ship: applyHits(armored, allocation), cargoAfter };
 }
 
 // A round's shots and damage, and the hits each ship's owner must allocate (§7 step 2, §7.2.2), before any
 // allocation is made. Returns { shots, damage, owed: { id: hits } }. Throws if the orders are illegal.
 export function hitsOwed(hex, orders) {
   const { ids, afterFiring, shots, damage } = prepareRound(hex, orders);
-  const owed = Object.fromEntries(ids.map((id) => [id, hitLimits(hex, orders, afterFiring, id, damage[id].effective).owed]));
+  const owed = Object.fromEntries(ids.map((id) => [id, hitLimits(hex, orders, afterFiring, id, toPlace(damage[id])).owed]));
   return { shots, damage, owed };
 }
 
@@ -255,7 +269,7 @@ export function hitsOwed(hex, orders) {
 export function checkHitAllocation(hex, orders, id, allocation) {
   if (!(id in hex.ships)) throw new RangeError(`Hit allocation for unknown ship: ${id}`);
   const { afterFiring, damage } = prepareRound(hex, orders);
-  takeHits(hex, orders, afterFiring, id, damage[id].effective, allocation);
+  takeHits(hex, orders, afterFiring, id, damage[id], allocation);
 }
 
 // Resolves one round (§7 steps 2-5). `hitAllocations` is the owners' choice, { id: { PD, B, ... } }:
@@ -280,7 +294,7 @@ export function resolveRound(hex, orders, hitAllocations = {}) {
     const base = hex.ships[id];
     const owner = base.owner;
     const dropId = orders[id].drop;
-    const { ship, cargoAfter } = takeHits(hex, orders, afterFiring, id, damage[id].effective, hitAllocations[id]);
+    const { ship, cargoAfter } = takeHits(hex, orders, afterFiring, id, damage[id], hitAllocations[id]);
     const kept = {};
     for (const [cid, hit] of Object.entries(cargoAfter)) {
       if (isDestroyed(hit)) {

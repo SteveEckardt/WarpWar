@@ -1,6 +1,6 @@
 # Roadmap
 
-Current phase: 8a
+Current phase: 8b
 
 0. Rules extraction: PDF to docs/rules/classic.md, ambiguities logged
 1. Ship building: attributes, BP costs, validation
@@ -30,4 +30,5 @@ Current phase: 8a
 8. Fan Extended rules as optional modules
 8a. Fan rules extraction: PDF pp. 14-29 to docs/rules/fan-extended.md; candidate modules compared with the classic
     rules in docs/rules/fan-modules.md; no code. Open questions are logged per module when the owner picks it
-8b+. One slice per module the owner picks, in the order chosen
+8b. Armor (fan §10.2.2, §7.5): the first module; sets how modules are switched on for a game
+8c+. One slice per further module the owner picks, in the order chosen
