@@ -1,6 +1,6 @@
 # Roadmap
 
-Current phase: 7g
+Current phase: 8a
 
 0. Rules extraction: PDF to docs/rules/classic.md, ambiguities logged
 1. Ship building: attributes, BP costs, validation
@@ -28,3 +28,6 @@ Current phase: 7g
 7g. UI for carrying Systemships: pickup and drop in movement (§6.2), in combat (§7.3) and after combat (§8),
     pickups on forced withdrawal, hits on carried Systemships (D-021)
 8. Fan Extended rules as optional modules
+8a. Fan rules extraction: PDF pp. 14-29 to docs/rules/fan-extended.md; candidate modules compared with the classic
+    rules in docs/rules/fan-modules.md; no code. Open questions are logged per module when the owner picks it
+8b+. One slice per module the owner picks, in the order chosen
