@@ -21,7 +21,7 @@ export function actingSide(state) {
 }
 
 // The player whose decision the game is waiting for, or null. Setup has one decision for a player: once the first
-// player is set, the player moving second chooses the side (ง4). That is made openly, before there are sides.
+// player is set, the player moving second chooses the side (ยง4). That is made openly, before there are sides.
 export function actingPlayer(state) {
   if (state.step === 'setup') return state.first == null ? null : state.players.find((p) => p !== state.first);
   const side = actingSide(state);

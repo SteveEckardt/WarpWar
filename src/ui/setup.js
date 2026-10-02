@@ -17,7 +17,7 @@ const MODULE_TEXT = {
   ecm: 'ECM (fan §7.1.1), Advanced only: ECM powered from PD moves incoming Missiles\' Drive up or down, after orders are revealed.',
 };
 
-// Who plays each player: someone at this screen, or the computer (a random legal player, Phase 9b).
+// Who plays each player: someone at this screen, or the computer (the planner, Phase 9b-3).
 const SEAT_TEXT = { local: 'Human', computer: 'Computer' };
 
 // values: { player1, player2, seats: [kind, kind], first: 0 | 1, scenario, modules, error }.
@@ -36,7 +36,7 @@ export function renderNewGame({
     `<fieldset><legend>Fan rules (optional)</legend>${Object.keys(MODULE_TEXT).map(module).join('')}</fieldset>`,
     `<div class="seat"><label>Player 1 <input name="player1" value="${esc(player1)}" required maxlength="24"></label>${seat(0)}</div>`,
     `<div class="seat"><label>Player 2 <input name="player2" value="${esc(player2)}" required maxlength="24"></label>${seat(1)}</div>`,
-    `<p class="hint">The computer plays at random: any legal move, no plan.</p>`,
+    `<p class="hint">The computer plays to win by simple rules of thumb.</p>`,
     `<fieldset><legend>Who moves first?</legend>`,
     `<label>${radio(0)} Player 1</label> <label>${radio(1)} Player 2</label>`,
     `</fieldset>`,

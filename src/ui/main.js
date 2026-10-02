@@ -193,9 +193,9 @@ async function act(action) {
   return true;
 }
 
-// The computer, pausing before each action so a human can follow it.
+// The computer (the planner, Phase 9b-3), pausing before each action so a human can follow it.
 function pacedComputer() {
-  const computer = createController('computer', { seed: Math.floor(Math.random() * 2 ** 31) });
+  const computer = createController('computer', { seed: Math.floor(Math.random() * 2 ** 31), strategy: 'plan' });
   return {
     kind: computer.kind,
     async nextAction(v, options) {

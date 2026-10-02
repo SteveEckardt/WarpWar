@@ -163,3 +163,36 @@ describe('in a game: the ECM step comes between revealing orders and taking hits
     assert.notEqual(s.combat.stage, 'ecm');
   });
 });
+
+describe('hits on ECM (fan §5.5.1, D-056)', () => {
+  // A's W fires Beam 5 at B's X, both Attack at Drive 0: Hit +2, 7 hits; X has no Screen up.
+  const fight = (target) => {
+    const hex = createHex({ W: mk('A', { PD: 5, B: 5 }), X: mk('B', target) });
+    const orders = {
+      W: { tactic: 'attack', D: 0, B: 5, S: 0, T: 0, beamTarget: 'X' },
+      X: { tactic: 'attack', D: 0, B: 0, S: 0, T: 0 },
+    };
+    return { hex, orders };
+  };
+
+  test('ECM takes hits like the other attributes: it counts toward the hits a ship must take', () => {
+    const { hex, orders } = fight({ PD: 2, E: 2 });
+    assert.equal(hitsOwed(hex, orders).owed.X, 4, 'PD 2 + E 2');
+    const r = resolveRound(hex, orders, { X: { PD: 2, E: 2 } });
+    assert.ok(r.destroyed.includes('X'));
+  });
+
+  test('the owner places them: ECM, or the other attributes first', () => {
+    const { hex, orders } = fight({ PD: 6, E: 2 });
+    const r = resolveRound(hex, orders, { X: { PD: 5, E: 2 } });
+    assert.deepEqual([r.hex.ships.X.PD, r.hex.ships.X.E], [1, 0]);
+  });
+
+  test('a ship with nothing left but ECM is destroyed by a hit on it, and the combat ends', () => {
+    const { hex, orders } = fight({ PD: 0, E: 1 });
+    assert.equal(hitsOwed(hex, orders).owed.X, 1);
+    const r = resolveRound(hex, orders, { X: { E: 1 } });
+    assert.ok(r.destroyed.includes('X'));
+    assert.equal(r.end.reason, 'all destroyed');
+  });
+});

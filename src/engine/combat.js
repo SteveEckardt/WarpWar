@@ -185,10 +185,11 @@ export function validateOrders(hex, orders) {
 }
 
 // Hits a ship can still take: one per point, Missiles in groups of 3 (§7.2.2). Only free racks count
-// (D-021), so `racks` is the free SR. A carried Systemship's own capacity is added by the caller.
+// (D-021), so `racks` is the free SR. ECM takes hits like the rest (D-056). A carried Systemship's own capacity is
+// added by the caller.
 function hitCapacity(ship, racks = ship.SR) {
   return ship.PD + ship.B + ship.S + ship.T + racks + Math.ceil(ship.M / MISSILES_PER_HIT)
-    + (ship.C ?? 0) + Math.ceil((ship.SH ?? 0) / SHELLS_PER_HIT);
+    + (ship.C ?? 0) + Math.ceil((ship.SH ?? 0) / SHELLS_PER_HIT) + (ship.E ?? 0);
 }
 
 // Hits the owner places after Armor has taken its share (D-042).

@@ -178,7 +178,7 @@ describe('actingSide: whose decision the loop waits for', () => {
 });
 
 describe('actingPlayer: whose controller the loop asks', () => {
-  test('in setup, the player moving second once the first is set (ง4); nobody before', () => {
+  test('in setup, the player moving second once the first is set (ยง4); nobody before', () => {
     const s = createGame({ map: mapData, scenario: 'learning', players: ['ann', 'bob'] });
     assert.equal(actingPlayer(s), null);
     assert.equal(actingPlayer(play(s, SETUP[0])), 'bob');
@@ -234,7 +234,7 @@ describe('the game loop', () => {
     assert.equal(controllers.bob.request.side, 'B');
   });
 
-  test('starts in setup: the player moving second chooses the side through their controller (ง4)', async () => {
+  test('starts in setup: the player moving second chooses the side through their controller (ยง4)', async () => {
     const controllers = local();
     const loop = createGameLoop({ state: play(createGame({ map: mapData, scenario: 'learning', players: ['ann', 'bob'] }), SETUP[0]), controllers });
     loop.run();

@@ -617,3 +617,17 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
   classic scenarios? Outside Advanced every ship is Level 0 (D-011), so the tech-level adjustment is always 0 there.
 - **Ruling (2026-10-01):** Advanced only. ECM is an option an Advanced game is created with, off by default;
   Learning and Basic games cannot use it.
+
+### D-056 — Hits on ECM
+- **Status:** RESOLVED
+- **Where:** fan §5.5.1; fan §7.1.1; classic §7.2.2, §7 step 3, §7 step 6(c); D-042; D-047; D-052 to D-054
+- **Text:** "The remaining 3 "effective" hits must be taken in the ship's attributes. This is done by subtracting
+  directly from Power/Drive rating, Beams, Tubes, Cannons, Missiles, Shells, Armor, ECM, Holds and Systemship
+  Racks." / classic §7 step 3: "Any ship that has received enough hits to reduce all its attributes to zero, except
+  for the warp generator … is destroyed."
+- **Question:** Does ECM take effective hits as the other attributes do, one point per hit, where its owner places
+  them? As built (Phase 8d), the engine counts ECM toward a ship being afloat but not toward the hits it can take.
+  So a ship with nothing left but ECM cannot be destroyed: it owes no hits, and the hits fired at it keep the
+  combat from ending by forced withdrawal (three rounds without effective hits). Found in Phase 9b-3, computer vs
+  computer, Advanced with ECM: one combat ran over a thousand rounds.
+- **Ruling (2026-10-02):** ECM takes hits like the other attributes: one point per hit, where its owner places them.

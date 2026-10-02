@@ -2,11 +2,11 @@
 // for its next action and hands it a view of the game, viewFor(state, side), never the state itself.
 //
 // A controller is { kind, nextAction(view, { side, player, rejection }) => action or Promise<action>, outcome?(result) }.
-// side is null while the player has none yet (choosing it, ง4). rejection is null, or the engine's { code, message } for the controller's last action, which it is asked to
+// side is null while the player has none yet (choosing it, ยง4). rejection is null, or the engine's { code, message } for the controller's last action, which it is asked to
 // replace. outcome is told { ok } or { ok: false, code, message } once each of its actions is applied or refused.
 //
 //   local: a player at this screen. The UI shows the waiting request's view and submits the player's action.
-//   computer: the computer opponent (computer.js): a random legal player, given a seed (Phase 9b-1).
+//   computer: the computer opponent (computer.js), given a seed and a strategy: random (9b-1, 9b-2) or plan (9b-3).
 //   remote: a player over the network (Phase 9c). Not implemented.
 
 import { createComputerController } from './computer.js';
@@ -58,7 +58,7 @@ export const createRemoteController = () => notImplemented('remote');
 
 const FACTORIES = { local: createLocalController, computer: createComputerController, remote: createRemoteController };
 
-// options: { seed } for a computer.
+// options: { seed, strategy } for a computer.
 export function createController(kind, options = {}) {
   if (!CONTROLLER_KINDS.includes(kind)) throw new RangeError(`A controller is ${CONTROLLER_KINDS.join(', ')}, not: ${kind}`);
   return FACTORIES[kind](options);
