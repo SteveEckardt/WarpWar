@@ -280,8 +280,8 @@ describe('illegal actions: setup (§4)', () => {
     rejects(s, { type: 'warp', player: 'ann' }, 'UNKNOWN_ACTION');
   });
 
-  test('only the Learning scenario is built', () => {
-    assert.throws(() => createGame({ map: mapData, scenario: 'basic', players: ['ann', 'bob'] }), /learning/i);
+  test('only the three scenarios exist (§4.1 to §4.3)', () => {
+    assert.throws(() => createGame({ map: mapData, scenario: 'epic', players: ['ann', 'bob'] }), /learning, basic or advanced/i);
   });
 });
 

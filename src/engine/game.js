@@ -1,5 +1,5 @@
-// The game as a state machine: setup, the player-turn sequence, the Learning scenario.
-// Rules: docs/rules/classic.md §3, §4, §4.1. Rulings: D-007 to D-013, D-022 in docs/decisions.md.
+// The game as a state machine: setup, the player-turn sequence, the Learning, Basic and Advanced scenarios.
+// Rules: docs/rules/classic.md §3, §4, §4.1 to §4.3, §5.3. Rulings: D-007 to D-013, D-022, D-041 in docs/decisions.md.
 //
 // applyAction(state, action) returns { ok: true, state } or { ok: false, code, message }. The state is plain
 // data and the one passed in is never changed. Every player decision is an action; the engine never chooses.
@@ -13,18 +13,38 @@
 // { star, round, stage, hex, ... } with stage 'orders', 'hits', 'retreats' or 'withdraw'.
 
 import { loadMap, starAt, starById, isHex, isAdjacent, sameHex, onMap } from './map.js';
-import { createShip, shipCost, validateShip } from './ships.js';
+import { ATTRIBUTES, createShip, shipCost, validateShip } from './ships.js';
 import { validateMove, FIRST_TURN } from './movement.js';
 import { createHex, validateOrders, hitsOwed, checkHitAllocation, resolveRound } from './combat.js';
 import { rearrange, withdrawSystemships } from './carrying.js';
 
 export const SIDES = ['A', 'B'];
 
-// §4.1. Basic and Advanced come in Phase 6c. `bases` names the base stars each side uses, as star ids on the
-// map (data/maps/classic-original.json): Learning uses the middle base of each end. Other bases are ordinary stars.
+// §4.1 to §4.3. `bases` names the base stars each side uses, as star ids on the map
+// (data/maps/classic-original.json): Learning and Basic use the middle base of each end, Advanced all three.
+// Other bases are ordinary stars.
+//   bp: Build Points at the start; income: new BP at each later Build event of a player (D-007).
+//   buildEveryTurn: a Build event every player-turn (Advanced); otherwise only each player's first.
+//   spendAll: that first Build event must spend every BP (§4.1, §4.2). Advanced may save BP.
+//   draws: the game can end in a draw (§3 event 1: Learning and Basic only).
+//   repair: repair and Missile resupply are used (§5.3: Advanced only).
 export const SCENARIOS = {
-  learning: { bp: 40, victoryPoints: 1, bases: { A: ['ur'], B: ['nippur'] } },
+  learning: {
+    bp: 40, income: 0, victoryPoints: 1, buildEveryTurn: false, spendAll: true, draws: true, repair: false,
+    bases: { A: ['ur'], B: ['nippur'] },
+  },
+  basic: {
+    bp: 50, income: 0, victoryPoints: 2, buildEveryTurn: false, spendAll: true, draws: true, repair: false,
+    bases: { A: ['ur'], B: ['nippur'] },
+  },
+  advanced: {
+    bp: 20, income: 10, victoryPoints: 3, buildEveryTurn: true, spendAll: false, draws: false, repair: true,
+    bases: { A: ['ur', 'eridu', 'larsa'], B: ['nippur', 'adab', 'akkad'] },
+  },
 };
+
+// §5.1, §5.3: one BP buys three Missiles, and resupplies up to three, split across ships if wanted.
+const MISSILES_PER_BP = 3;
 
 class Rejection extends Error {
   constructor(code, message) {
@@ -56,13 +76,13 @@ function checkBases(stars, scenario, bases) {
 
 // A new game waiting for setup (§4). Throws on bad input.
 export function createGame({ map, scenario, players }) {
-  if (!(scenario in SCENARIOS)) throw new RangeError(`Only the learning scenario is built so far, not: ${scenario}`);
+  if (!(scenario in SCENARIOS)) throw new RangeError(`A scenario is learning, basic or advanced, not: ${scenario}`);
   if (!Array.isArray(players) || players.length !== 2 || players[0] === players[1]
     || !players.every((p) => typeof p === 'string' && p.length > 0)) {
     throw new RangeError('A game needs two different player names');
   }
   const loaded = loadMap(map);
-  // Learning: only the named base of each side is used; the others are ordinary stars (§4.1).
+  // Only the scenario's bases are used; the others are ordinary stars (§4.1, §4.2).
   const bases = structuredClone(SCENARIOS[scenario].bases);
   checkBases(loaded.stars, scenario, bases);
   const active = new Set([...bases.A, ...bases.B]);
@@ -78,6 +98,7 @@ export function createGame({ map, scenario, players }) {
     active: null,
     step: 'setup',
     bp: Object.fromEntries(SIDES.map((side) => [side, SCENARIOS[scenario].bp])),
+    vp: { A: 0, B: 0 }, // running totals (D-041)
     hasBuilt: { A: false, B: false },
     ships: {},
     moved: [],
@@ -171,21 +192,30 @@ function checkDestination(s, side, from, to, id) {
 // §3 event 1, then on to Build or Movement. Victory is checked before the draw (D-037).
 function startPlayerTurn(s) {
   const side = s.active;
-  const vp = victoryPoints(s, side);
-  if (vp >= SCENARIOS[s.scenario].victoryPoints) {
+  const scenario = SCENARIOS[s.scenario];
+  // D-041: this turn's count is added to the side's running total, which is never lost.
+  s.vp[side] += victoryPoints(s, side);
+  if (s.vp[side] >= scenario.victoryPoints) {
     s.step = 'over';
-    s.result = { winner: side, player: playerOf(s, side), victoryPoints: vp };
+    s.result = { winner: side, player: playerOf(s, side), victoryPoints: s.vp[side] };
     return;
   }
   // D-009, checked at the start of each player-turn once both players have had their first Build event (D-036).
-  if (SIDES.every((sd) => s.hasBuilt[sd]) && !SIDES.some((sd) => hasEffectiveShip(s, sd))) {
+  // Learning and Basic only (§3 event 1).
+  if (scenario.draws && SIDES.every((sd) => s.hasBuilt[sd]) && !SIDES.some((sd) => hasEffectiveShip(s, sd))) {
     s.step = 'over';
     s.result = { draw: true };
     return;
   }
   s.moved = [];
-  // Learning: the only Build event is each player's first (§4.1).
-  s.step = s.hasBuilt[side] ? 'movement' : 'build';
+  if (scenario.buildEveryTurn) {
+    // §4.3, D-007: income arrives in each of the player's Build events after the first.
+    if (s.hasBuilt[side]) s.bp[side] += scenario.income;
+    s.step = 'build';
+  } else {
+    // Learning and Basic: the only Build event is each player's first (§4.1, §4.2).
+    s.step = s.hasBuilt[side] ? 'movement' : 'build';
+  }
 }
 
 function setFirstPlayer(s, action) {
@@ -205,15 +235,50 @@ function chooseSide(s, action) {
   startPlayerTurn(s);
 }
 
-// §3 event 2, §4.1: all BP spent on Warpships in one Build event, placed on controlled bases (D-013).
-// ships: [{ id, design, at: starId }].
+// §5.3: a ship of the side that started the turn on one of the side's base stars. The Build event comes before
+// movement, so that is where it is now. A Systemship loaded on a Warpship goes by its Warpship's hex.
+// Returns the ship's record (on the map, or in its carrier's hold).
+function repairable(s, side, id) {
+  let record = s.ships[id];
+  let at = record;
+  let owner = record?.owner;
+  if (!record) {
+    const carrier = Object.values(s.ships).find((sh) => id in (sh.carrying ?? {}));
+    if (carrier) {
+      record = carrier.carrying[id];
+      at = carrier;
+      owner = carrier.owner;
+    }
+  }
+  if (!record) reject('UNKNOWN_SHIP', `No ship ${id}`);
+  if (owner !== side) reject('NOT_YOUR_SHIP', `${id} is not yours`);
+  if (!s.bases[side].some((b) => sameHex(starById(s.map, b), at))) {
+    reject('NOT_AT_BASE', `${id} did not start the turn on one of your base stars (§5.3)`);
+  }
+  return record;
+}
+
+// §3 event 2, §5, §5.3: build new ships, placed on controlled bases (D-013), and repair and resupply old ones,
+// all paid from the side's Build Points.
+//   ships: [{ id, design, at: starId }]
+//   repairs: { id: { PD, B, S, T, SR: points } }, up to the strength the ship was built with (Advanced only)
+//   resupply: { id: Missiles }, up to the Missiles it was built with; 1 BP per 3, rounded up (Advanced only)
+// Learning and Basic: one Build event, which must spend every BP (§4.1, §4.2). Advanced: any amount, saved.
 function build(s, action) {
   expectStep(s, 'build');
   const side = activeSide(s, action.player);
-  if (!Array.isArray(action.ships) || action.ships.length === 0) reject('BAD_BUILD', 'Build needs a list of ships');
+  const scenario = SCENARIOS[s.scenario];
+  const ships = action.ships ?? [];
+  if (!Array.isArray(ships) || (scenario.spendAll && ships.length === 0)) reject('BAD_BUILD', 'Build needs a list of ships');
+  const repairs = action.repairs ?? {};
+  const resupply = action.resupply ?? {};
+  if (!isObject(repairs) || !isObject(resupply)) reject('BAD_REPAIR', 'repairs and resupply map ship ids to amounts');
+  if (!scenario.repair && Object.keys(repairs).length + Object.keys(resupply).length > 0) {
+    reject('NO_REPAIR', `Repair and resupply are not used in the ${s.scenario} scenario (§4.1, §4.2)`);
+  }
   const ids = new Set();
   let total = 0;
-  for (const entry of action.ships) {
+  for (const entry of ships) {
     const { id, design, at } = entry ?? {};
     if (typeof id !== 'string' || id.length === 0) reject('BAD_BUILD', 'Each new ship needs an id');
     if (ids.has(id) || id in s.ships || Object.values(s.ships).some((sh) => id in (sh.carrying ?? {}))) {
@@ -226,13 +291,47 @@ function build(s, action) {
     if (enemyAt(s, side, starById(s.map, at))) reject('BASE_NOT_CONTROLLED', `${id}: enemy ships are on ${at} (D-013)`);
     total += shipCost(design);
   }
-  if (total > s.bp[side]) reject('OVER_BP', `Ships cost ${total} BP but you have ${s.bp[side]}`);
-  if (total < s.bp[side]) reject('BP_NOT_SPENT', `All ${s.bp[side]} BP must be spent; these ships cost ${total} (§4.1)`);
 
-  for (const { id, design, at } of action.ships) {
+  // §5.3: one BP repairs one point, up to the ship's original strength. Missiles come back by resupply.
+  for (const [id, amounts] of Object.entries(repairs)) {
+    const record = repairable(s, side, id);
+    if (!isObject(amounts)) reject('BAD_REPAIR', `${id}: a repair maps attributes to points`);
+    for (const [attr, n] of Object.entries(amounts)) {
+      if (attr === 'M') reject('BAD_REPAIR', `${id}: Missiles are resupplied, not repaired (§5.3)`);
+      if (!ATTRIBUTES.includes(attr)) reject('BAD_REPAIR', `${id}: cannot repair ${attr}`);
+      if (!Number.isInteger(n) || n < 1) reject('BAD_REPAIR', `${id}: repair ${attr} by a whole number of points, 1 or more`);
+      if (record[attr] + n > record.built[attr]) {
+        reject('OVER_BUILT', `${id}: ${attr} ${record[attr]} + ${n} is more than the ${record.built[attr]} it was built with (§5.3)`);
+      }
+      total += n;
+    }
+  }
+  // §5.3: one BP resupplies up to 3 Missiles, across ships; fractions of a BP are not saved.
+  let missiles = 0;
+  for (const [id, n] of Object.entries(resupply)) {
+    if (!Number.isInteger(n) || n < 1) reject('BAD_REPAIR', `${id}: resupply a whole number of Missiles, 1 or more`);
+    const record = repairable(s, side, id);
+    if (record.M + n > record.built.M) {
+      reject('OVER_BUILT', `${id}: ${record.M} + ${n} Missiles is more than the ${record.built.M} it was built with (§5.3)`);
+    }
+    missiles += n;
+  }
+  total += Math.ceil(missiles / MISSILES_PER_BP);
+
+  if (total > s.bp[side]) reject('OVER_BP', `This costs ${total} BP but you have ${s.bp[side]}`);
+  if (scenario.spendAll && total < s.bp[side]) {
+    reject('BP_NOT_SPENT', `All ${s.bp[side]} BP must be spent; these ships cost ${total} (§4.1, §4.2)`);
+  }
+
+  for (const { id, design, at } of ships) {
     const star = starById(s.map, at);
     s.ships[id] = { ...createShip(design, s.scenario, s.turn), owner: side, q: star.q, r: star.r };
   }
+  for (const [id, amounts] of Object.entries(repairs)) {
+    const record = repairable(s, side, id);
+    for (const [attr, n] of Object.entries(amounts)) record[attr] += n;
+  }
+  for (const [id, n] of Object.entries(resupply)) repairable(s, side, id).M += n;
   s.bp[side] -= total;
   s.hasBuilt[side] = true;
   s.step = 'movement';

@@ -427,3 +427,22 @@ Entry format: ID, title, status, where it appears, the rule text as quoted, and 
   [min, max] }`, where x = q + r/2 is the column and r the row, edges included. On the original map it is the
   area the renderers already draw, the stars plus 2 hexes all round: x from -13 to 13, r from -8 to 8. A move,
   retreat or withdrawal may not end a step off the map. A map without bounds (the test maps) has no edge.
+
+## H. Scenarios
+
+### D-041 — Victory points: running total or bases held at once
+- **Status:** RESOLVED
+- **Where:** §3 event 1; §4.2; §4.3; D-010
+- **Text:** "Count one victory point for each enemy base star hex your ship(s) occupy NOW, at the BEGINNING of
+  your turn. If this brings your point total to the level necessary for the victory conditions in the scenario
+  you are playing, then you have won" / Basic: "Each player uses only the single base star hex in the middle of
+  his end of the map. The first player to accumulate two victory points wins." / Advanced: "The first player to
+  accumulate three victory points is the winner."
+- **Question:** Is a player's point total a running total, adding each turn's count to the points from earlier
+  turns, or only the count at the start of this turn? In Basic each side has one base, so the count at one turn
+  start is never more than 1: read as a count, Basic could never be won. In Advanced, does holding one enemy
+  base for three of your turns win, or must three enemy bases be held at once? If points carry over, are they
+  ever lost (for example, when the enemy retakes the base)?
+- **Ruling (2026-10-01):** A running total, never lost. At the start of each of a player's turns, the enemy base
+  stars they occupy (D-010) are added to their total; the player wins when the total reaches the scenario's
+  level. Holding one enemy base for two of your turns wins Basic; Learning (1 point) is unchanged.
