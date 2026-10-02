@@ -144,6 +144,11 @@ fieldset.order legend { font-size: 12px; color: var(--muted); }
 .orders-text.side-B { border-color: var(--side-b); }
 tr.placing-now th, tr.placing-now td { color: var(--focus); }
 
+/* Phase 7f: Basic and Advanced */
+label.scenario { display: flex; gap: 6px; align-items: baseline; margin: 4px 0; }
+fieldset.repair { margin: 8px 0; }
+fieldset.repair legend { font-size: 12px; color: var(--muted); }
+
 /* Phase 7e: game log and the end of the game */
 .game-log { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
 .game-log summary { cursor: pointer; color: var(--muted); }

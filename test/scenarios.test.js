@@ -1,7 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createGame, applyAction, SCENARIOS } from '../src/engine/game.js';
+import { createGame, applyAction, SCENARIOS, controlledBases, repairCandidates } from '../src/engine/game.js';
 
 // Phase 6c: the Basic and Advanced scenarios (§4.2, §4.3), tech levels (§5.2), repair and resupply (§5.3).
 // Rulings: D-007 (income per game-turn, in each player's own Build event), D-009 (draws), D-010 and D-041
@@ -285,5 +285,34 @@ describe('Advanced scenario: victory (§4.3, D-010, D-041)', () => {
     assert.deepEqual(s.vp, { A: 2, B: 0 });
     s = pass(pass(s, 'ann', build('ann')), 'bob', build('bob'));
     assert.deepEqual(s.result, { winner: 'A', player: 'ann', victoryPoints: 4 });
+  });
+});
+
+describe('queries for the UI: where to build and what to repair', () => {
+  test('controlledBases: the side\'s scenario bases with no enemy ships on them (D-013)', () => {
+    const s = started('advanced');
+    assert.deepEqual(controlledBases(s, 'A'), ['ur', 'eridu', 'larsa']);
+    const held = structuredClone(s);
+    held.ships.X9 = { owner: 'B', WG: true, level: 0, PD: 1, B: 0, S: 0, T: 0, M: 0, SR: 0, built: {}, q: -9, r: -4 };
+    assert.deepEqual(controlledBases(held, 'A'), ['ur', 'larsa']);
+    assert.deepEqual(controlledBases(started('basic'), 'B'), ['nippur']);
+  });
+
+  test('repairCandidates: own ships on own bases, carried Systemships with their Warpship (§5.3)', () => {
+    let s = pass(started('advanced'), 'ann', build('ann', [
+      { id: 'W1', design: { WG: true, PD: 1, SR: 1 }, at: 'ur' },
+      { id: 'S1', design: { PD: 2, B: 1 }, at: 'ur' },
+      { id: 'W2', design: { WG: true, PD: 1 }, at: 'eridu' },
+    ]));
+    s = pass(s, 'bob', build('bob', [{ id: 'B1', design: { WG: true, PD: 1 }, at: 'nippur' }]));
+    s = structuredClone(s);
+    const { owner, q, r, ...record } = s.ships.S1;
+    s.ships.W1.carrying = { S1: record };
+    delete s.ships.S1;
+    Object.assign(s.ships.W2, { q: -7, r: 0 }); // Isin: not a base
+    const found = repairCandidates(s, 'A');
+    assert.deepEqual(found.map((c) => [c.id, c.carrier]), [['W1', null], ['S1', 'W1']]);
+    assert.equal(found[1].ship.PD, 2);
+    assert.deepEqual(repairCandidates(s, 'B').map((c) => c.id), ['B1']);
   });
 });

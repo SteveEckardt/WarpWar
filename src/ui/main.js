@@ -8,7 +8,7 @@ import { starAt } from '../engine/map.js';
 import { renderMap, esc } from './hexmap.js';
 import { renderHexPanel, renderStatus } from './panel.js';
 import { renderNewGame, renderChooseSide } from './setup.js';
-import { EMPTY_DESIGN, nextShipId, buildAction, renderBuilder, renderDesignSummary } from './builder.js';
+import { EMPTY_DESIGN, nextShipId, buildAction, buildCheck, renderBuilder, renderBuildCheck, renderDesignSummary } from './builder.js';
 import { renderMovement, planInfo } from './movement.js';
 import {
   renderChoose, renderOrders, renderOrderCheck, blankOrders, pendingReport, renderHits, renderHitCheck,
@@ -36,6 +36,8 @@ const ui = {
   setup: {},
   design: { ...EMPTY_DESIGN },
   drafts: [],
+  repairs: {}, // Build event: { id: { attr: points } }
+  resupply: {}, // Build event: { id: Missiles }
   error: null,
   // Combat drafts, for the player at the screen; reset whenever the stage, round or player changes.
   draftKey: null,
@@ -156,9 +158,10 @@ function startGame(form) {
   const data = new FormData(form);
   const players = [String(data.get('player1')).trim(), String(data.get('player2')).trim()];
   const first = Number(data.get('first'));
-  ui.setup = { player1: players[0], player2: players[1], first };
+  const scenario = String(data.get('scenario') ?? 'learning');
+  ui.setup = { player1: players[0], player2: players[1], first, scenario };
   try {
-    ui.game = createGame({ map: ui.mapData, scenario: 'learning', players });
+    ui.game = createGame({ map: ui.mapData, scenario, players });
   } catch (e) {
     ui.setup.error = e.message;
     return;
@@ -219,6 +222,8 @@ const handlers = {
     ui.plan = null;
     ui.design = { ...EMPTY_DESIGN };
     ui.drafts = [];
+    ui.repairs = {};
+    ui.resupply = {};
     ui.error = null;
   },
   seen(el) {
@@ -227,7 +232,7 @@ const handlers = {
   // Back to the setup form; the names from the last game stay filled in.
   'new-game'() {
     Object.assign(ui, {
-      game: null, viewer: null, selected: null, plan: null, design: { ...EMPTY_DESIGN }, drafts: [], error: null,
+      game: null, viewer: null, selected: null, plan: null, design: { ...EMPTY_DESIGN }, drafts: [], repairs: {}, resupply: {}, error: null,
       draftKey: null, orders: {}, allocations: {}, dest: {}, placing: null, seen: new Set(), log: [], logOpen: false,
     });
     ui.setup = { ...ui.setup, error: null };
@@ -250,7 +255,11 @@ const handlers = {
     ui.error = null;
   },
   build() {
-    if (act(buildAction(ui.viewer, ui.drafts))) ui.drafts = [];
+    if (act(buildAction(ui.viewer, ui.drafts, ui.repairs, ui.resupply))) {
+      ui.drafts = [];
+      ui.repairs = {};
+      ui.resupply = {};
+    }
   },
   plan(el) {
     const ship = ui.game.ships[el.dataset.id];
@@ -388,11 +397,46 @@ document.addEventListener('input', (e) => {
     $('hit-check').innerHTML = renderHitCheck(ui.game, ui.game.sides[ui.viewer], ui.allocations);
     return;
   }
+  // The new-game form: show the chosen scenario's bases on the map.
+  if (e.target.matches('form.new-game input[name="scenario"]')) {
+    ui.setup = { ...ui.setup, scenario: e.target.value };
+    ui.preview = createGame({ map: ui.mapData, scenario: e.target.value, players: ['1', '2'] });
+    mapEl.innerHTML = renderMap(ui.preview, {});
+    return;
+  }
+  const repairs = e.target.closest('form.repairs');
+  if (repairs) {
+    readRepairs(repairs);
+    refreshBuildChecks();
+    return;
+  }
   const form = e.target.closest('form.design');
   if (!form) return;
   ui.design = readDesign(form);
-  $('design-summary').innerHTML = renderDesignSummary(ui.game, ui.game.sides[ui.viewer], ui.design, ui.drafts);
+  refreshBuildChecks();
 });
+
+// The repair and resupply fields: hits on Missiles go to resupply, the rest to repairs (§5.3).
+function readRepairs(form) {
+  ui.repairs = {};
+  ui.resupply = {};
+  for (const set of form.querySelectorAll('fieldset[data-ship]')) {
+    const id = set.dataset.ship;
+    for (const input of set.querySelectorAll('input[type="number"]')) {
+      const n = count(input);
+      if (n === 0) continue;
+      if (input.name === 'M') ui.resupply[id] = n;
+      else ui.repairs[id] = { ...(ui.repairs[id] ?? {}), [input.name]: n };
+    }
+  }
+}
+
+// The builder's live checks: the design being edited, and the whole Build event.
+function refreshBuildChecks() {
+  const check = buildCheck(ui.game, ui.viewer, ui);
+  $('design-summary').innerHTML = renderDesignSummary(ui.game, ui.game.sides[ui.viewer], ui.design, ui.drafts, check.repairs + check.resupply);
+  $('build-check').innerHTML = renderBuildCheck(ui.game, ui.viewer, ui);
+}
 
 try {
   const res = await fetch('data/maps/classic-original.json');

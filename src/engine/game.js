@@ -235,27 +235,42 @@ function chooseSide(s, action) {
   startPlayerTurn(s);
 }
 
-// §5.3: a ship of the side that started the turn on one of the side's base stars. The Build event comes before
-// movement, so that is where it is now. A Systemship loaded on a Warpship goes by its Warpship's hex.
-// Returns the ship's record (on the map, or in its carrier's hold).
+// D-013: the side's scenario bases with no enemy ships on them, where new ships may be placed. In map order.
+export function controlledBases(state, side) {
+  return state.bases[side].filter((id) => !enemyAt(state, side, starById(state.map, id)));
+}
+
+const onOwnBase = (s, side, hex) => s.bases[side].some((b) => sameHex(starById(s.map, b), hex));
+
+// A ship by id: on the map, or in a Warpship's hold. { record, owner, hex, carrier } or null.
+function findShip(s, id) {
+  if (s.ships[id]) return { record: s.ships[id], owner: s.ships[id].owner, hex: s.ships[id], carrier: null };
+  const entry = Object.entries(s.ships).find(([, sh]) => id in (sh.carrying ?? {}));
+  if (!entry) return null;
+  const [carrier, sh] = entry;
+  return { record: sh.carrying[id], owner: sh.owner, hex: sh, carrier };
+}
+
+// §5.3: the side's ships that may be repaired or resupplied in this Build event: those that started the turn on
+// one of the side's base stars. The Build event comes before movement, so that is where they are now. A
+// Systemship loaded on a Warpship goes with its Warpship. [{ id, ship, carrier: id | null }], carried after carrier.
+export function repairCandidates(state, side) {
+  const out = [];
+  for (const [id, sh] of Object.entries(state.ships)) {
+    if (sh.owner !== side || !onOwnBase(state, side, sh)) continue;
+    out.push({ id, ship: sh, carrier: null });
+    for (const [cid, rec] of Object.entries(sh.carrying ?? {})) out.push({ id: cid, ship: rec, carrier: id });
+  }
+  return out;
+}
+
+// The record of a ship the side may repair or resupply (see repairCandidates), or a rejection.
 function repairable(s, side, id) {
-  let record = s.ships[id];
-  let at = record;
-  let owner = record?.owner;
-  if (!record) {
-    const carrier = Object.values(s.ships).find((sh) => id in (sh.carrying ?? {}));
-    if (carrier) {
-      record = carrier.carrying[id];
-      at = carrier;
-      owner = carrier.owner;
-    }
-  }
-  if (!record) reject('UNKNOWN_SHIP', `No ship ${id}`);
-  if (owner !== side) reject('NOT_YOUR_SHIP', `${id} is not yours`);
-  if (!s.bases[side].some((b) => sameHex(starById(s.map, b), at))) {
-    reject('NOT_AT_BASE', `${id} did not start the turn on one of your base stars (§5.3)`);
-  }
-  return record;
+  const found = findShip(s, id);
+  if (!found) reject('UNKNOWN_SHIP', `No ship ${id}`);
+  if (found.owner !== side) reject('NOT_YOUR_SHIP', `${id} is not yours`);
+  if (!onOwnBase(s, side, found.hex)) reject('NOT_AT_BASE', `${id} did not start the turn on one of your base stars (§5.3)`);
+  return found.record;
 }
 
 // §3 event 2, §5, §5.3: build new ships, placed on controlled bases (D-013), and repair and resupply old ones,
@@ -288,7 +303,7 @@ function build(s, action) {
     const errors = validateShip(isObject(design) ? design : {}, s.scenario);
     if (errors.length > 0) reject(errors[0].code, `${id}: ${errors[0].message}`);
     if (!s.bases[side].includes(at)) reject('NOT_A_BASE', `${id}: ${at} is not one of your base stars in this scenario`);
-    if (enemyAt(s, side, starById(s.map, at))) reject('BASE_NOT_CONTROLLED', `${id}: enemy ships are on ${at} (D-013)`);
+    if (!controlledBases(s, side).includes(at)) reject('BASE_NOT_CONTROLLED', `${id}: enemy ships are on ${at} (D-013)`);
     total += shipCost(design);
   }
 

@@ -4,13 +4,20 @@
 import { SIDES } from '../engine/game.js';
 import { esc } from './hexmap.js';
 
-// values: { player1, player2, first: 0 | 1, error }.
-export function renderNewGame({ player1 = 'Player 1', player2 = 'Player 2', first = 0, error = null } = {}) {
+const SCENARIO_TEXT = {
+  learning: 'Learning (§4.1): 40 BP of Warpships each, the middle bases only; 1 victory point wins.',
+  basic: 'Basic (§4.2): 50 BP of Warpships and Systemships, the middle bases only; 2 victory points win.',
+  advanced: 'Advanced (§4.3): 20 BP, then 10 every turn; all three bases, repair, resupply and technology; 3 victory points win.',
+};
+
+// values: { player1, player2, first: 0 | 1, scenario, error }.
+export function renderNewGame({ player1 = 'Player 1', player2 = 'Player 2', first = 0, scenario = 'learning', error = null } = {}) {
   const radio = (n) => `<input type="radio" name="first" value="${n}"${first === n ? ' checked' : ''}>`;
+  const choice = (id) => `<label class="scenario"><input type="radio" name="scenario" value="${id}"${scenario === id ? ' checked' : ''}> ${SCENARIO_TEXT[id]}</label>`;
   return [
     `<h2>New game</h2>`,
-    `<p class="meta">Learning scenario (§4.1): 40 BP of Warpships each; first to occupy the enemy base wins.</p>`,
     `<form class="new-game" autocomplete="off">`,
+    `<fieldset><legend>Scenario</legend>${Object.keys(SCENARIO_TEXT).map(choice).join('')}</fieldset>`,
     `<label>Player 1 <input name="player1" value="${esc(player1)}" required maxlength="24"></label>`,
     `<label>Player 2 <input name="player2" value="${esc(player2)}" required maxlength="24"></label>`,
     `<fieldset><legend>Who moves first?</legend>`,

@@ -1,6 +1,6 @@
 # Roadmap
 
-Current phase: 6c
+Current phase: 7f
 
 0. Rules extraction: PDF to docs/rules/classic.md, ambiguities logged
 1. Ship building: attributes, BP costs, validation
@@ -23,4 +23,8 @@ Current phase: 6c
 7c. Movement
 7d. Combat with hidden-order handoff
 7e. Game log and victory screen
+7f. UI for Basic and Advanced: scenario choice; builder with Systemships, racks, repair, resupply and saved BP;
+    a Build event every Advanced turn; victory point totals (D-041) in the status line, log and end screen
+7g. UI for carrying Systemships: pickup and drop in movement (§6.2), in combat (§7.3) and after combat (§8),
+    pickups on forced withdrawal, hits on carried Systemships (D-021)
 8. Fan Extended rules as optional modules

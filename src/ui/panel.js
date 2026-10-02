@@ -1,7 +1,7 @@
 // The side panel and status line as HTML strings. Pure: no DOM.
 
 import { ATTRIBUTES } from '../engine/ships.js';
-import { SIDES } from '../engine/game.js';
+import { SIDES, SCENARIOS } from '../engine/game.js';
 import { esc, shipsAt } from './hexmap.js';
 import { displayId, playerOf, seesRecords } from './view.js';
 
@@ -83,5 +83,10 @@ export function renderStatus(state) {
   const starName = (id) => state.map.stars.find((s) => s.id === id)?.name ?? id;
   const stage = state.step === 'combat' ? (state.combat ? `, ${state.combat.stage} at ${esc(starName(state.combat.star))}` : ', choosing a contested star') : '';
   parts.push(`step: ${state.step}${stage}`);
+  // D-041: running totals, worth showing where more than one point is needed.
+  const goal = SCENARIOS[state.scenario].victoryPoints;
+  if (goal > 1 && state.sides) {
+    parts.push(`victory points: ${SIDES.map((sd) => `${esc(playerOf(state, sd))} ${state.vp[sd]}`).join(', ')} (${goal} to win)`);
+  }
   return parts.join(' · ');
 }

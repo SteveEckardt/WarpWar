@@ -3,6 +3,7 @@
 // round's public result (§7 step 2). Never designs, Build Points, orders still secret, or where hits were taken.
 // Each entry is worked out from the state before an action, the action, and the state after it.
 
+import { SCENARIOS } from '../engine/game.js';
 import { starAt, starById } from '../engine/map.js';
 import { esc } from './hexmap.js';
 import { displayId, playerOf } from './view.js';
@@ -45,12 +46,18 @@ function occupied(state, winner) {
   });
 }
 
+// "Nippur, a base of bob" / "Nippur, Adab, bases of bob": the enemy bases the side's ships stand on.
+function holding(state, side) {
+  const bases = occupied(state, side).map((id) => starName(state, id));
+  return `${list(bases)}, ${bases.length === 1 ? 'a base' : 'bases'} of ${playerOf(state, other(side))}`;
+}
+const points = (n) => `${n} victory point${n === 1 ? '' : 's'}`;
+
 export function resultText(state) {
   const r = state.result;
   if (r.draw) return 'The game is a draw: neither player has an effective ship.';
-  const bases = occupied(state, r.winner).map((id) => starName(state, id));
-  const loser = playerOf(state, other(r.winner));
-  return `${r.player} wins: ${r.player} occupies ${list(bases)}, a base of ${loser} (${r.victoryPoints} victory point${r.victoryPoints === 1 ? '' : 's'}).`;
+  if (SCENARIOS[state.scenario].victoryPoints === 1) return `${r.player} wins: ${r.player} occupies ${holding(state, r.winner)} (${points(r.victoryPoints)}).`;
+  return `${r.player} wins with ${points(r.victoryPoints)}, scored over the turns (D-041): ${r.player} occupies ${holding(state, r.winner)}.`;
 }
 
 // The entries for one accepted action: [{ turn, text }].
@@ -116,6 +123,13 @@ export function logEntries(before, action, after) {
     const end = `Combat at ${starName(after, before.combat.star)} is over.`;
     if (texts.length > 0) texts[texts.length - 1] += ` ${end}`;
     else texts.push(end);
+  }
+  // D-041: points scored at the start of the turn that just began (the result says so if they win).
+  const now = after.active;
+  if (now && after.vp && after.step !== 'over' && after.vp[now] > (before.vp?.[now] ?? 0)) {
+    const gain = after.vp[now] - (before.vp?.[now] ?? 0);
+    const goal = SCENARIOS[after.scenario].victoryPoints;
+    texts.push(`${playerOf(after, now)} occupies ${holding(after, now)}: ${points(gain)}, ${after.vp[now]} of ${goal} so far.`);
   }
   if (after.step === 'over' && before.step !== 'over') texts.push(resultText(after));
   return texts.map((text) => ({ turn: after.turn, text }));
