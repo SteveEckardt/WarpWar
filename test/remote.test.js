@@ -94,7 +94,9 @@ describe('a room: one game on the server', () => {
     assert.equal(room.join('cat', () => {}).code, 'UNKNOWN_PLAYER');
     assert.deepEqual(room.join('ann', (m) => ann.push(m)), { ok: true });
     assert.equal(room.join('ann', () => {}).code, 'SEAT_TAKEN');
-    assert.deepEqual(ann[0], { type: 'joined', player: 'ann', settings: { scenario: 'learning', modules: [], players: ['ann', 'bob'], first: 'ann', seats: { ann: 'remote', bob: 'remote' } } });
+    const { token, ...joined } = ann[0];
+    assert.deepEqual(joined, { type: 'joined', player: 'ann', settings: { scenario: 'learning', modules: [], players: ['ann', 'bob'], first: 'ann', seats: { ann: 'remote', bob: 'remote' } }, connected: { ann: true, bob: false } });
+    assert.equal(typeof token, 'string');
     assert.equal(room.started, false);
     room.join('bob', () => {});
     assert.equal(room.started, true);
@@ -211,6 +213,70 @@ describe('a room: one game on the server', () => {
     room.join('ann', () => {});
     assert.deepEqual(room.info().open, []);
     assert.equal(room.info().started, true);
+  });
+});
+
+describe('rejoining (Phase 9c-3)', () => {
+  // A room whose seat tokens are t1, t2, ... in joining order.
+  const room = (seats = { ann: 'remote', bob: 'remote' }) => {
+    let n = 0;
+    return createRoom({ ...settings(seats), newToken: () => `t${(n += 1)}` });
+  };
+
+  test('joining gives the seat a token; rejoining with it takes the seat back and resends what was missed', async () => {
+    const r = room();
+    const ann = [];
+    const bob = [];
+    r.join('ann', (m) => ann.push(m));
+    const bobSend = (m) => bob.push(m);
+    r.join('bob', bobSend);
+    assert.equal(bob[0].token, 't2');
+    const decide = bob.find((m) => m.type === 'decide');
+    r.leave('bob', bobSend);
+    assert.deepEqual(r.connected, ['ann']);
+    assert.equal(r.join('bob', () => {}).code, 'SEAT_TAKEN', 'a seat is taken back with its token, not its name');
+    assert.equal(r.rejoin('t9', () => {}).code, 'BAD_TOKEN');
+    const again = [];
+    assert.deepEqual(r.rejoin('t2', (m) => again.push(m)), { ok: true, player: 'bob' });
+    assert.deepEqual(again.map((m) => m.type), ['joined', 'view', 'decide']);
+    assert.equal(again[0].token, 't2');
+    assert.deepEqual(again.at(-1), decide, 'the waiting decision, sent again as it was');
+    r.receive('bob', { type: 'action', id: decide.id, action: { type: 'chooseSide', player: 'bob', side: 'B' } });
+    await settle();
+    assert.equal(r.state.sides.bob, 'B');
+  });
+
+  test('the other player is told when a player drops and comes back', () => {
+    const r = room();
+    const ann = [];
+    const bob = (m) => {};
+    r.join('ann', (m) => ann.push(m));
+    r.join('bob', bob);
+    assert.deepEqual(ann.filter((m) => m.type === 'presence'), [{ type: 'presence', player: 'bob', connected: true }]);
+    r.leave('bob', bob);
+    assert.deepEqual(ann.at(-1), { type: 'presence', player: 'bob', connected: false });
+    assert.deepEqual(r.connected, ['ann']);
+    r.rejoin('t2', () => {});
+    assert.deepEqual(ann.at(-1), { type: 'presence', player: 'bob', connected: true });
+  });
+
+  test('a connection that has been replaced leaving does not take the seat with it', () => {
+    const r = room();
+    const first = () => {};
+    r.join('ann', first);
+    r.rejoin('t1', () => {});
+    r.leave('ann', first);
+    assert.deepEqual(r.connected, ['ann']);
+  });
+
+  test('over: once the game has ended (or stopped on an error)', async () => {
+    const r = createRoom(settings({ ann: 'remote', bob: 'plan' }));
+    assert.equal(r.over, false);
+    const ann = bot('plan', 2);
+    r.join('ann', (m) => ann.send(m));
+    ann.connect((m) => r.receive('ann', m));
+    await r.done;
+    assert.equal(r.over, true);
   });
 });
 

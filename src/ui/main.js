@@ -6,6 +6,8 @@
 // both players see together: the status line, the game log and a round's public report.
 // A game with a Remote player is held by the server (Phase 9c-2): this page plays its one Human through a client
 // (net.js), and `game` is then that player's view, as the server last sent it, with the server's public log.
+// The seat (game code and token) is kept for this browser tab, so a reload takes it back (Phase 9c-3); the
+// client reconnects by itself after a dropped connection.
 // D-039: between two local players, private views wait behind a handoff screen until the player who must act
 // says they are at the screen. A round's public report (§7 step 2) is shown to both players before the next
 // handoff. Add ?sample to the URL to load the Phase 7a sample game.
@@ -134,7 +136,9 @@ function actionsHtml() {
     return `<p class="hint">The computer is playing for ${esc(actingPlayer(game))}…</p>`;
   }
   if (g.step !== 'over' && waitingFor()?.kind === 'remote') {
-    return `<p class="hint">Waiting for ${esc(actingPlayer(game))}${waitingFor().byComputer ? ' (the computer, on the server)' : ', at another browser'}…</p>`;
+    const other = actingPlayer(game);
+    if (ui.net?.presence[other] === false) return `<p class="hint">${esc(other)} lost the connection. Waiting for them to come back…</p>`;
+    return `<p class="hint">Waiting for ${esc(other)}${waitingFor().byComputer ? ' (the computer, on the server)' : ', at another browser'}…</p>`;
   }
   if (g.step === 'setup') return renderChooseSide(g);
   if (g.step === 'build') return renderBuilder(g, ui.viewer, ui);
@@ -159,7 +163,11 @@ function render() {
   let state = ui.preview;
   if (game) state = hide ? viewFor(game, null) : view();
   statusEl.innerHTML = game ? renderStatus(game) : ui.net ? 'Waiting for the other player to join' : 'Set up a new game';
-  if (ui.net?.closed && game?.step !== 'over') statusEl.textContent = 'The connection to the server was lost.';
+  if (ui.net && game?.step !== 'over') {
+    if (ui.net.replaced) statusEl.textContent = 'This game was opened in another window.';
+    else if (ui.net.closed) statusEl.textContent = 'The connection to the server was lost.';
+    else if (!ui.net.connected) statusEl.textContent = 'Reconnecting to the server…';
+  }
   renderPaceBar();
   // Nobody human playing: the computers wait while a round report is open, so it is read before play goes on.
   pacer.hold(report != null && kindsOf().every((k) => k === 'computer'));
@@ -265,11 +273,50 @@ function stopLoop() {
   controllers = null;
   ui.net?.close();
   ui.net = null;
+  saveSeat(null);
   ui.joining.client?.close();
+}
+
+// The seat this tab holds in a game on the server: { code, token }, kept for a reload (9c-3). Storage may be
+// unavailable (a private window, say); the game then simply cannot be taken back after a reload.
+const SEAT_KEY = 'warpwar.seat';
+function saveSeat(seat) {
+  try {
+    if (seat) sessionStorage.setItem(SEAT_KEY, JSON.stringify(seat));
+    else sessionStorage.removeItem(SEAT_KEY);
+  } catch {
+    // no storage: nothing kept
+  }
+}
+function savedSeat() {
+  try {
+    return JSON.parse(sessionStorage.getItem(SEAT_KEY) ?? 'null');
+  } catch {
+    return null;
+  }
+}
+
+// After a reload: takes the saved seat back, if its game is still on the server.
+async function resumeSeat() {
+  const seat = savedSeat();
+  if (!seat) return;
+  try {
+    const client = await connectPlay(playUrl(location));
+    try {
+      await client.rejoin(seat.code, seat.token);
+    } catch (e) {
+      client.close();
+      throw e;
+    }
+    playNetwork(client);
+  } catch {
+    saveSeat(null);
+  }
 }
 
 // Plays a game held by the server as `me`, through the client (9c-2). The other player is a remote seat here.
 function playNetwork(client) {
+  saveSeat({ code: client.code, token: client.token });
   ui.net = client;
   ui.joining = {};
   const { seats, players } = client.settings;
@@ -734,6 +781,8 @@ try {
   if (new URLSearchParams(location.search).has('sample')) {
     game = sampleGame(ui.mapData);
     startLoop(Object.fromEntries(game.players.map((p) => [p, 'local'])));
+  } else {
+    await resumeSeat();
   }
   render();
 } catch (e) {

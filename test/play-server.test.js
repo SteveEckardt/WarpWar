@@ -21,18 +21,28 @@ online('the play server (/play)', () => {
   });
   after(() => server.close());
 
-  // A client: send(message), next(type) waits for the next message of that type, all lists what came.
+  // A client: send(message), next(type) takes the oldest message of that type not yet taken (waiting for one if
+  // need be: several can arrive together, before the test asks), all lists what came.
   async function connect(path = '/play') {
     const ws = new WebSocket(url + path);
     const all = [];
+    const unread = [];
     const waiters = [];
     ws.addEventListener('message', (e) => {
       const m = JSON.parse(e.data);
       all.push(m);
-      for (const w of waiters.filter((x) => x.type === m.type)) {
+      const w = waiters.find((x) => x.type === m.type);
+      if (w) {
         waiters.splice(waiters.indexOf(w), 1);
         w.resolve(m);
+      } else {
+        unread.push(m);
       }
+    });
+    const next = (type) => new Promise((resolve) => {
+      const i = unread.findIndex((m) => m.type === type);
+      if (i >= 0) resolve(unread.splice(i, 1)[0]);
+      else waiters.push({ type, resolve });
     });
     await new Promise((resolve, reject) => {
       ws.addEventListener('open', resolve);
@@ -42,7 +52,7 @@ online('the play server (/play)', () => {
       ws,
       all,
       send: (m) => ws.send(typeof m === 'string' ? m : JSON.stringify(m)),
-      next: (type) => new Promise((resolve) => waiters.push({ type, resolve })),
+      next,
       close: () => ws.close(),
     };
   }
@@ -144,7 +154,142 @@ online('the play server (/play)', () => {
     ann.close();
   });
 
+  test('rejoining (9c-3): a dropped player comes back with the seat token, is sent what was missed, and play goes on', async () => {
+    const ann = await connect();
+    ann.send(LEARNING);
+    const { code } = await ann.next('created');
+    const bob = await connect();
+    ann.send({ type: 'join', code, player: 'ann' });
+    await ann.next('joined');
+    const arrived = ann.next('presence');
+    bob.send({ type: 'join', code, player: 'bob' });
+    const { token } = await bob.next('joined');
+    const decide = await bob.next('decide');
+    assert.deepEqual(await arrived, { type: 'presence', player: 'bob', connected: true });
+    const dropped = ann.next('presence');
+    bob.close();
+    assert.deepEqual(await dropped, { type: 'presence', player: 'bob', connected: false });
+
+    const back = await connect();
+    const game = Promise.all([autoplay(ann, 'plan', 5), autoplay(back, 'plan', 6)]);
+    const returned = ann.next('presence');
+    back.send({ type: 'rejoin', code: code.toLowerCase(), token });
+    const joined = await back.next('joined');
+    assert.deepEqual([joined.player, joined.token, joined.connected], ['bob', token, { ann: true, bob: true }]);
+    assert.deepEqual(await returned, { type: 'presence', player: 'bob', connected: true });
+    const [a, b] = await game;
+    assert.deepEqual(a, b);
+    assert.ok(back.all.some((m) => m.type === 'decide' && m.id === decide.id), 'the waiting decision, sent again');
+    assert.ok(back.all.some((m) => m.type === 'log' && m.entries[0].text === 'ann moves first.'), 'the whole log');
+    const bad = await connect();
+    bad.send({ type: 'rejoin', code, token: 'nope' });
+    assert.equal((await bad.next('error')).code, 'BAD_TOKEN');
+    for (const c of [ann, back, bad]) c.close();
+  });
+
+  test('rejoining from a second window closes the first, which is told why', async () => {
+    const one = await connect();
+    one.send(LEARNING);
+    const { code } = await one.next('created');
+    one.send({ type: 'join', code, player: 'ann' });
+    const { token } = await one.next('joined');
+    const closed = new Promise((done) => one.ws.addEventListener('close', (e) => done(e.code)));
+    const two = await connect();
+    two.send({ type: 'rejoin', code, token });
+    await two.next('joined');
+    assert.equal(await closed, 4001);
+    two.close();
+  });
+
   test('only /play takes WebSockets', async () => {
     await assert.rejects(connect('/other'));
   });
 });
+
+// Cleaning up (9c-3): with a clock of the test's own, and the sweep run by hand.
+online('the play server cleans up its games', () => {
+  let server;
+  let url;
+  let play;
+  let clock = 0;
+  const IDLE = 1000;
+  before(async () => {
+    server = createStaticServer(root);
+    play = attachPlay(server, { map: JSON.parse(readFileSync(new URL('../data/maps/classic-original.json', import.meta.url), 'utf8')), idleMs: IDLE, now: () => clock });
+    await new Promise((done) => server.listen(0, '127.0.0.1', done));
+    url = `ws://127.0.0.1:${server.address().port}/play`;
+  });
+  after(() => server.close());
+
+  const open = async () => {
+    const ws = new WebSocket(url);
+    const got = [];
+    ws.addEventListener('message', (e) => got.push(JSON.parse(e.data)));
+    await new Promise((done) => ws.addEventListener('open', done));
+    const next = async (type) => {
+      for (let i = 0; i < 400; i += 1) {
+        const m = got.find((x) => x.type === type);
+        if (m) {
+          got.splice(got.indexOf(m), 1);
+          return m;
+        }
+        await new Promise((done) => setTimeout(done, 5));
+      }
+      throw new Error(`no ${type}`);
+    };
+    return { ws, send: (m) => ws.send(JSON.stringify(m)), next, close: () => new Promise((done) => { ws.addEventListener('close', done); ws.close(); }) };
+  };
+  const SETTINGS = { type: 'create', scenario: 'learning', players: ['ann', 'bob'], first: 'ann', seats: { ann: 'remote', bob: 'remote' } };
+
+  test('a game nobody is connected to goes once it has been idle long enough; one with a player stays', async () => {
+    const c = await open();
+    clock = 0;
+    c.send(SETTINGS);
+    const { code: lonely } = await c.next('created');
+    c.send(SETTINGS);
+    const { code: busy } = await c.next('created');
+    c.send({ type: 'join', code: busy, player: 'ann' });
+    await c.next('joined');
+    clock = IDLE - 1;
+    play.sweep();
+    assert.ok(play.rooms.has(lonely));
+    clock = IDLE * 5;
+    play.sweep();
+    assert.ok(!play.rooms.has(lonely), 'never joined, idle: gone');
+    assert.ok(play.rooms.has(busy), 'ann is still connected');
+    await c.close();
+    await new Promise((done) => setTimeout(done, 20));
+    play.sweep();
+    assert.ok(play.rooms.has(busy), 'idle only from when the last player left');
+    clock += IDLE;
+    play.sweep();
+    assert.ok(!play.rooms.has(busy));
+    const d = await open();
+    d.send({ type: 'rejoin', code: busy, token: 'x' });
+    assert.equal((await d.next('error')).code, 'NO_GAME');
+    await d.close();
+  });
+
+  test('a finished game goes as soon as nobody is connected', async () => {
+    const c = await open();
+    c.send({ ...SETTINGS, seats: { ann: 'remote', bob: 'plan' } });
+    const { code } = await c.next('created');
+    // ann answers each decision with the computer's choice until the game is over.
+    const computer = createComputerController({ seed: 8, strategy: 'plan' });
+    const over = new Promise((done) => c.ws.addEventListener('message', (e) => {
+      const m = JSON.parse(e.data);
+      if (m.type === 'decide') c.send({ type: 'action', id: m.id, action: computer.nextAction(m.view, m) });
+      if (m.type === 'view' && m.view.step === 'over') done();
+    }));
+    c.send({ type: 'join', code, player: 'ann' });
+    await over;
+    assert.equal(play.rooms.get(code).over, true);
+    play.sweep();
+    assert.ok(play.rooms.has(code), 'ann is still looking at the end');
+    await c.close();
+    await new Promise((done) => setTimeout(done, 20));
+    play.sweep();
+    assert.ok(!play.rooms.has(code), 'over, nobody connected: gone at once, idle or not');
+  });
+});
+

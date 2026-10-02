@@ -9,6 +9,11 @@
 // The public log (Phase 9c-2): describe(before, action, after) returns the entries both players may read about an
 // action ({ turn, text }; the page's logEntries). They are sent to every remote player as { type: 'log', entries },
 // and a player who joins is sent the log so far. Actions themselves are never sent: they can hold secrets.
+//
+// Rejoining (Phase 9c-3): joining gives the seat a secret token, and rejoin(token, send) takes the seat back on a
+// new connection, which is sent what it missed: the latest view, the decision waiting and the whole log. The
+// seat's last connection is the one it keeps; an older one leaving takes nothing with it. The other players are
+// told when a player drops and comes back ({ type: 'presence', player, connected }).
 
 import { createGame, applyAction } from '../engine/game.js';
 import { viewFor } from '../engine/view.js';
@@ -19,8 +24,10 @@ import { createComputerController, computerSeed, STRATEGIES, MAX_SEED } from './
 export const SEAT_KINDS = ['remote', ...STRATEGIES];
 
 // settings: { map, scenario, modules, players: [p1, p2], first: player, seats: { [player]: SEAT_KINDS }, seed,
-// describe }. Throws a RangeError for settings that do not make a game.
-export function createRoom({ map, scenario, modules = [], players, first, seats, seed, describe = () => [] }) {
+// describe, newToken }. Throws a RangeError for settings that do not make a game.
+export function createRoom({
+  map, scenario, modules = [], players, first, seats, seed, describe = () => [], newToken = () => globalThis.crypto.randomUUID(),
+}) {
   const created = createGame({ map, scenario, players, modules });
   if (!seats || players.some((p) => !SEAT_KINDS.includes(seats[p]))) {
     throw new RangeError(`Each player's seat is ${SEAT_KINDS.join(', ')}`);
@@ -37,6 +44,8 @@ export function createRoom({ map, scenario, modules = [], players, first, seats,
     seats[p] === 'remote' ? createRemoteController() : createComputerController({ seed: computerSeed(seed, i), strategy: seats[p] })]));
   const remotes = players.filter((p) => seats[p] === 'remote');
   const taken = new Set();
+  const tokens = new Map(); // token: player
+  const sends = new Map(); // player: their connection's send, while connected
   let state = r.state;
   let loop = null;
   let failure = null;
@@ -48,6 +57,20 @@ export function createRoom({ map, scenario, modules = [], players, first, seats,
   const showAll = (s) => {
     for (const p of remotes) controllers[p].show(viewFor(s, s.sides?.[p] ?? null));
   };
+
+  const presence = (player, connected) => {
+    for (const p of remotes) if (p !== player && sends.has(p)) controllers[p].tell({ type: 'presence', player, connected });
+  };
+
+  // Puts a connection in a seat: tells it where it is, then sends what it missed.
+  function seat(player, send, token) {
+    sends.set(player, send);
+    const connected = Object.fromEntries(remotes.map((p) => [p, sends.has(p)]));
+    send({ type: 'joined', player, settings: shown, token, connected });
+    if (log.length > 0) send({ type: 'log', entries: [...log] });
+    controllers[player].attach(send);
+    presence(player, true);
+  }
 
   function start() {
     showAll(state);
@@ -83,6 +106,14 @@ export function createRoom({ map, scenario, modules = [], players, first, seats,
     info() {
       return { settings: shown, open: remotes.filter((p) => !taken.has(p)), started: loop != null };
     },
+    // The remote players connected now.
+    get connected() {
+      return remotes.filter((p) => sends.has(p));
+    },
+    // The game has ended, or stopped on an error.
+    get over() {
+      return state.step === 'over' || failure != null;
+    },
     // The error the game stopped on, if it did.
     get failure() {
       return failure;
@@ -94,15 +125,25 @@ export function createRoom({ map, scenario, modules = [], players, first, seats,
       if (seats[player] !== 'remote') return { ok: false, code: 'NOT_REMOTE', message: `${player} is played by the computer` };
       if (taken.has(player)) return { ok: false, code: 'SEAT_TAKEN', message: `${player} has already joined` };
       taken.add(player);
-      send({ type: 'joined', player, settings: shown });
-      if (log.length > 0) send({ type: 'log', entries: [...log] });
-      controllers[player].attach(send);
+      const token = newToken();
+      tokens.set(token, player);
+      seat(player, send, token);
       if (!loop && taken.size === remotes.length) start();
       return { ok: true };
     },
-    // The player's connection is gone. Phase 9c-1: the seat stays taken (rejoining is 9c-3).
-    leave(player) {
-      controllers[player]?.detach?.();
+    // Takes a seat back with its token, on a new connection.
+    rejoin(token, send) {
+      const player = tokens.get(token);
+      if (!player) return { ok: false, code: 'BAD_TOKEN', message: 'That seat token is not for this game' };
+      seat(player, send, token);
+      return { ok: true, player };
+    },
+    // A player's connection is gone. Only the seat's latest connection counts: an older one leaving is ignored.
+    leave(player, send) {
+      if (!sends.has(player) || sends.get(player) !== send) return;
+      sends.delete(player);
+      controllers[player].detach();
+      presence(player, false);
     },
     receive(player, message) {
       if (taken.has(player)) controllers[player].receive(message);

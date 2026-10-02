@@ -40,7 +40,7 @@ online('the client', () => {
   function autoplay(client, strategy, seed) {
     const computer = createComputerController({ seed, strategy });
     let busy = false;
-    client.onUpdate(async () => {
+    const answer = async () => {
       if (busy) return;
       busy = true;
       while (client.request) {
@@ -49,7 +49,9 @@ online('the client', () => {
         assert.equal(outcome.ok, true, outcome.message);
       }
       busy = false;
-    });
+    };
+    client.onUpdate(answer);
+    answer(); // a decision already waiting
   }
 
   test('create, look up the code, join, and play a game to the end from two clients', async () => {
@@ -115,4 +117,67 @@ online('the client', () => {
     await until(() => told);
     await assert.rejects(connectPlay(url.replace('/play', '/nowhere')));
   });
+
+  test('reconnecting (9c-3): after a dropped connection the client takes its seat back by itself, and play goes on', async () => {
+    const quick = { retryMs: [20, 40, 80] };
+    const ann = await connectPlay(url, quick);
+    const code = await ann.create(LEARNING);
+    await ann.join(code, 'ann');
+    assert.equal(typeof ann.token, 'string');
+    const bob = await connectPlay(url, quick);
+    await bob.join(code, 'bob');
+    await until(() => bob.request && ann.presence.bob === true);
+    const asked = bob.request.id;
+    bob.socket.close(); // the network drops, as far as the client knows
+    await until(() => ann.presence.bob === false);
+    await until(() => bob.connected && bob.request);
+    assert.equal(bob.request.id, asked, 'the same decision, sent again');
+    assert.equal(bob.closed, false);
+    assert.equal(ann.presence.bob, true);
+    assert.equal(bob.log[0].text, 'ann moves first.', 'the log, whole again');
+    autoplay(ann, 'plan', 3);
+    autoplay(bob, 'plan', 4);
+    await until(() => ann.view?.step === 'over' && bob.view?.step === 'over');
+    ann.close();
+    bob.close();
+  });
+
+  test('rejoin: a page that was reloaded takes its seat back with the saved code and token', async () => {
+    const ann = await connectPlay(url);
+    const code = await ann.create(LEARNING);
+    await ann.join(code, 'ann');
+    const { token } = ann;
+    ann.close();
+    const again = await connectPlay(url);
+    assert.equal((await again.rejoin(code, token)).players[0], 'ann');
+    assert.equal(again.player, 'ann');
+    const stranger = await connectPlay(url);
+    await assert.rejects(stranger.rejoin(code, 'wrong'), { code: 'BAD_TOKEN' });
+    stranger.close();
+    again.close();
+  });
+
+  test("taken back in another window: the old client stops and says so, without reconnecting", async () => {
+    const one = await connectPlay(url, { retryMs: [10] });
+    const code = await one.create(LEARNING);
+    await one.join(code, 'ann');
+    const two = await connectPlay(url);
+    await two.rejoin(code, one.token);
+    await until(() => one.closed);
+    assert.equal(one.replaced, true);
+    await new Promise((done) => setTimeout(done, 50));
+    assert.equal(one.connected, false);
+    two.close();
+  });
+
+  test('a game gone from the server: reconnecting gives up, and the client is closed', async () => {
+    const ann = await connectPlay(url, { retryMs: [10, 10] });
+    const code = await ann.create(LEARNING);
+    await ann.join(code, 'ann');
+    ann.token = 'not-any-more';
+    ann.socket.close();
+    await until(() => ann.closed);
+    assert.equal(ann.connected, false);
+  });
 });
+
