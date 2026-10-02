@@ -1,4 +1,4 @@
-import { test, describe, before, after } from 'node:test';
+import { test, describe, before, after, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
@@ -23,8 +23,15 @@ online('the play server (/play)', () => {
 
   // A client: send(message), next(type) takes the oldest message of that type not yet taken (waiting for one if
   // need be: several can arrive together, before the test asks), all lists what came.
+  // Every socket a test opens is closed after it, passed or failed: an open one would keep the run alive.
+  const sockets = [];
+  afterEach(() => {
+    for (const ws of sockets.splice(0)) ws.close();
+  });
+
   async function connect(path = '/play') {
     const ws = new WebSocket(url + path);
+    sockets.push(ws);
     const all = [];
     const unread = [];
     const waiters = [];
@@ -221,13 +228,18 @@ online('the play server cleans up its games', () => {
   });
   after(() => server.close());
 
+  const sockets = [];
+  afterEach(() => {
+    for (const ws of sockets.splice(0)) ws.close();
+  });
   const open = async () => {
     const ws = new WebSocket(url);
+    sockets.push(ws);
     const got = [];
     ws.addEventListener('message', (e) => got.push(JSON.parse(e.data)));
     await new Promise((done) => ws.addEventListener('open', done));
     const next = async (type) => {
-      for (let i = 0; i < 400; i += 1) {
+      for (let i = 0; i < 1000; i += 1) {
         const m = got.find((x) => x.type === type);
         if (m) {
           got.splice(got.indexOf(m), 1);

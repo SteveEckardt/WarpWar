@@ -1,4 +1,4 @@
-import { test, describe, before, after } from 'node:test';
+import { test, describe, before, after, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -31,8 +31,20 @@ online('the client', () => {
   after(() => server.close());
 
   const LEARNING = { scenario: 'learning', players: ['ann', 'bob'], first: 'ann', seats: { ann: 'remote', bob: 'remote' } };
+  // Every client a test opens is closed after it, passed or failed: an open one would keep the run alive.
+  const opened = [];
+  const connect = async (...args) => {
+    const client = await connectPlay(...args);
+    opened.push(client);
+    return client;
+  };
+  afterEach(() => {
+    for (const client of opened.splice(0)) client.close();
+  });
+
+  // Waits for a condition, up to 5 s: the whole suite runs at once, so things can be slow.
   const until = async (check) => {
-    for (let i = 0; i < 200 && !check(); i += 1) await new Promise((done) => setTimeout(done, 5));
+    for (let i = 0; i < 1000 && !check(); i += 1) await new Promise((done) => setTimeout(done, 5));
     assert.ok(check(), 'timed out');
   };
 
@@ -55,12 +67,12 @@ online('the client', () => {
   }
 
   test('create, look up the code, join, and play a game to the end from two clients', async () => {
-    const ann = await connectPlay(url);
+    const ann = await connect(url);
     const code = await ann.create(LEARNING);
     assert.equal((await ann.join(code, 'ann')).seats.bob, 'remote');
     assert.equal(ann.player, 'ann');
     assert.equal(ann.view, null, 'no view until every player has joined');
-    const bob = await connectPlay(url);
+    const bob = await connect(url);
     assert.deepEqual((await bob.info(code)).open, ['bob']);
     autoplay(ann, 'plan', 1);
     autoplay(bob, 'plan', 2);
@@ -75,10 +87,10 @@ online('the client', () => {
   });
 
   test('the request waits until answered; a refused action comes back as the outcome, then asked again', async () => {
-    const ann = await connectPlay(url);
+    const ann = await connect(url);
     const code = await ann.create(LEARNING);
     await ann.join(code, 'ann');
-    const bob = await connectPlay(url);
+    const bob = await connect(url);
     await bob.join(code, 'bob');
     await until(() => bob.request);
     assert.equal(bob.request.view.step, 'setup');
@@ -96,19 +108,19 @@ online('the client', () => {
   });
 
   test("a server error fails the call: an unknown code, a taken seat, a game that is not one", async () => {
-    const c = await connectPlay(url);
+    const c = await connect(url);
     await assert.rejects(c.info('ZZZZZ'), { code: 'NO_GAME' });
     await assert.rejects(c.create({ ...LEARNING, scenario: 'chess' }), { code: 'BAD_GAME' });
     const code = await c.create(LEARNING);
     await c.join(code, 'ann');
-    const d = await connectPlay(url);
+    const d = await connect(url);
     await assert.rejects(d.join(code, 'ann'), { code: 'SEAT_TAKEN' });
     c.close();
     d.close();
   });
 
   test('the connection closing is told to the page', async () => {
-    const c = await connectPlay(url);
+    const c = await connect(url);
     let told = false;
     c.onUpdate(() => {
       if (c.closed) told = true;
@@ -119,12 +131,12 @@ online('the client', () => {
   });
 
   test('reconnecting (9c-3): after a dropped connection the client takes its seat back by itself, and play goes on', async () => {
-    const quick = { retryMs: [20, 40, 80] };
-    const ann = await connectPlay(url, quick);
+    const quick = { retryMs: [20, 40, 80, 160, 320] };
+    const ann = await connect(url, quick);
     const code = await ann.create(LEARNING);
     await ann.join(code, 'ann');
     assert.equal(typeof ann.token, 'string');
-    const bob = await connectPlay(url, quick);
+    const bob = await connect(url, quick);
     await bob.join(code, 'bob');
     await until(() => bob.request && ann.presence.bob === true);
     const asked = bob.request.id;
@@ -133,7 +145,8 @@ online('the client', () => {
     await until(() => bob.connected && bob.request);
     assert.equal(bob.request.id, asked, 'the same decision, sent again');
     assert.equal(bob.closed, false);
-    assert.equal(ann.presence.bob, true);
+    // Told on ann's own connection, which may be a moment behind bob's.
+    await until(() => ann.presence.bob === true);
     assert.equal(bob.log[0].text, 'ann moves first.', 'the log, whole again');
     autoplay(ann, 'plan', 3);
     autoplay(bob, 'plan', 4);
@@ -143,25 +156,25 @@ online('the client', () => {
   });
 
   test('rejoin: a page that was reloaded takes its seat back with the saved code and token', async () => {
-    const ann = await connectPlay(url);
+    const ann = await connect(url);
     const code = await ann.create(LEARNING);
     await ann.join(code, 'ann');
     const { token } = ann;
     ann.close();
-    const again = await connectPlay(url);
+    const again = await connect(url);
     assert.equal((await again.rejoin(code, token)).players[0], 'ann');
     assert.equal(again.player, 'ann');
-    const stranger = await connectPlay(url);
+    const stranger = await connect(url);
     await assert.rejects(stranger.rejoin(code, 'wrong'), { code: 'BAD_TOKEN' });
     stranger.close();
     again.close();
   });
 
   test("taken back in another window: the old client stops and says so, without reconnecting", async () => {
-    const one = await connectPlay(url, { retryMs: [10] });
+    const one = await connect(url, { retryMs: [10] });
     const code = await one.create(LEARNING);
     await one.join(code, 'ann');
-    const two = await connectPlay(url);
+    const two = await connect(url);
     await two.rejoin(code, one.token);
     await until(() => one.closed);
     assert.equal(one.replaced, true);
@@ -171,7 +184,7 @@ online('the client', () => {
   });
 
   test('a game gone from the server: reconnecting gives up, and the client is closed', async () => {
-    const ann = await connectPlay(url, { retryMs: [10, 10] });
+    const ann = await connect(url, { retryMs: [10, 10] });
     const code = await ann.create(LEARNING);
     await ann.join(code, 'ann');
     ann.token = 'not-any-more';

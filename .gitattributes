@@ -1,0 +1,8 @@
+# Line endings: LF in the repository and in every checkout, whatever core.autocrlf says. The files are kept with
+# LF already; this stops Git converting them to CRLF on Windows and warning about it on every commit.
+* text=auto eol=lf
+
+# Never converted.
+*.pdf binary
+*.png binary
+*.ico binary
